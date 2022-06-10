@@ -4,7 +4,7 @@ using RMQ.Client.Connection.Adapters;
 
 namespace RMQ.Client.Connection;
 
-internal class ChannelPool : IChannelPool
+internal class ChannelPool : IProducerChannelPool
 {
     private static readonly TimeSpan ReleaseTimeout = TimeSpan.FromSeconds(30);
 
