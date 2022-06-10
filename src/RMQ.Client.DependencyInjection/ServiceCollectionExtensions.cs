@@ -19,6 +19,7 @@ public static class ServiceCollectionExtensions
         Func<IProducerBuilder, IProducerBuilder>? producerBuilderDefaults = null)
     {
         services
+            .AddSingleton(parameters)
             .AddSingleton(CreateConnectionFactory(parameters))
             .AddSingleton<IProducerChannelPool, ChannelPool>()
             .AddScoped<DefaultBodyEncodingMiddleware>();
