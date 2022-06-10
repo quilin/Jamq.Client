@@ -22,7 +22,7 @@ internal class ChannelPool : IChannelPool
         this.parameters = parameters;
     }
 
-    public Task<IChannelAdapter> Get()
+    public IChannelAdapter Get()
     {
         lock (connections)
         {

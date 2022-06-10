@@ -6,6 +6,6 @@ internal interface IConnectionAdapter : IDisposable
     decimal BusinessRatio { get; }
     ConnectionBusinessStatus Status { get; }
 
-    Task<IChannelAdapter> OpenChannel();
+    IChannelAdapter OpenChannel();
     event EventHandler<ConnectionDisruptedEventArgs> OnDisrupted;
 }

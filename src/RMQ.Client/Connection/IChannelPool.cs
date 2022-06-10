@@ -4,7 +4,7 @@ namespace RMQ.Client.Connection;
 
 internal interface IChannelPool : IDisposable
 {
-    Task<IChannelAdapter> Get();
+    IChannelAdapter Get();
 }
 
 internal interface IProducerChannelPool : IChannelPool

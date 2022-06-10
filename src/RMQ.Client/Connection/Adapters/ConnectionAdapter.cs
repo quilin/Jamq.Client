@@ -37,9 +37,9 @@ internal class ConnectionAdapter : IConnectionAdapter
         _ => ConnectionBusinessStatus.Idle
     };
 
-    public async Task<IChannelAdapter> OpenChannel()
+    public IChannelAdapter OpenChannel()
     {
-        if (!await semaphore.WaitAsync(releaseTimeout))
+        if (!semaphore.Wait(releaseTimeout))
         {
             throw new ConnectionChannelsExceededException(channelsLimit);
         }
