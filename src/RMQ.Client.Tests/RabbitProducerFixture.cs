@@ -6,7 +6,7 @@ using RMQ.Client.DependencyInjection;
 
 namespace RMQ.Client.Tests;
 
-public class RabbitProducerFixture
+public class RabbitProducerFixture : IDisposable
 {
     public IServiceCollection ServiceCollection { get; }
     private readonly DefaultServiceProviderFactory providerFactory;
@@ -17,9 +17,7 @@ public class RabbitProducerFixture
         ServiceCollection = providerFactory.CreateBuilder(new ServiceCollection());
         ServiceCollection.AddRmqClient(new RabbitConnectionParameters());
 
-        var connectionFactory = providerFactory
-            .CreateServiceProvider(ServiceCollection)
-            .GetRequiredService<IConnectionFactory>();
+        var connectionFactory = GetServiceProvider().GetRequiredService<IConnectionFactory>();
         using var connection = connectionFactory.CreateConnection();
         using var channel = connection.CreateModel();
 
@@ -32,4 +30,14 @@ public class RabbitProducerFixture
         .GetRequiredService<IProducerBuilder>();
 
     public IServiceProvider GetServiceProvider() => providerFactory.CreateServiceProvider(ServiceCollection);
+
+    public void Dispose()
+    {
+        var connectionFactory = GetServiceProvider().GetRequiredService<IConnectionFactory>();
+        using var connection = connectionFactory.CreateConnection();
+        using var channel = connection.CreateModel();
+
+        channel.QueueDelete("test-queue");
+        channel.ExchangeDelete("test-exchange");
+    }
 }
