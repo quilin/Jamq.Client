@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using RabbitMQ.Client;
 using RMQ.Client.Abstractions;
+using RMQ.Client.Abstractions.Consuming;
 using RMQ.Client.Abstractions.Producing;
 using RMQ.Client.DependencyInjection;
 
@@ -22,14 +23,17 @@ public class RabbitProducerFixture : IDisposable
         using var channel = connection.CreateModel();
 
         channel.ExchangeDeclare("test-exchange", "topic", true);
-        channel.QueueDeclare("test-queue", true, false);
+        channel.QueueDeclare("test-queue", true, false, false);
         channel.QueueBind("test-queue", "test-exchange", "#");
     }
 
     public IProducerBuilder GetProducerBuilder() => providerFactory.CreateServiceProvider(ServiceCollection)
         .GetRequiredService<IProducerBuilder>();
 
-    public IServiceProvider GetServiceProvider() => providerFactory.CreateServiceProvider(ServiceCollection);
+    public IConsumerBuilder GetConsumerBuilder() => providerFactory.CreateServiceProvider(ServiceCollection)
+        .GetRequiredService<IConsumerBuilder>();
+
+    private IServiceProvider GetServiceProvider() => providerFactory.CreateServiceProvider(ServiceCollection);
 
     public void Dispose()
     {
