@@ -39,4 +39,14 @@ public class RabbitConnectionParameters
     /// Password
     /// </summary>
     public string Password { get; }
+
+    /// <summary>
+    /// Channels per connection limit
+    /// </summary>
+    public int ChannelsLimit { get; init; } = 256;
+
+    /// <summary>
+    /// Connections per pool limit
+    /// </summary>
+    public int PoolSize { get; init; } = 16;
 }
