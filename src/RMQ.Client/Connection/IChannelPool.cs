@@ -10,3 +10,7 @@ internal interface IChannelPool : IDisposable
 internal interface IProducerChannelPool : IChannelPool
 {
 }
+
+internal interface IConsumerChannelPool : IChannelPool
+{
+}
