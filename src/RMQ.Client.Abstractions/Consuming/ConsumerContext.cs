@@ -9,6 +9,12 @@ public class ConsumerContext<TMessage> : ConsumerContext
     {
     }
 
+    internal static ConsumerContext<TMessage> From(ConsumerContext context) =>
+        new(context.NativeDeliverEvent, context.ServiceProvider)
+        {
+            StoredValues = context.StoredValues
+        };
+
     /// <summary>
     /// Decoded incoming message
     /// </summary>
@@ -33,7 +39,7 @@ public abstract class ConsumerContext
     /// <summary>
     /// Values to share between the pipeline steps
     /// </summary>
-    public IDictionary<string, object> StoredValues { get; } = new Dictionary<string, object>();
+    public IDictionary<string, object> StoredValues { get; internal set; } = new Dictionary<string, object>();
 
     protected ConsumerContext(
         BasicDeliverEventArgs deliverEventArgs,

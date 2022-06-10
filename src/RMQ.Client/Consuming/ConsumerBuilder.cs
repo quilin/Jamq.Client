@@ -50,6 +50,13 @@ internal class ConsumerBuilder : IConsumerBuilder
     private Func<ConsumerDelegate<TMessage>, ConsumerDelegate<TMessage>> ToPipelineStep<TMessage>(object description) =>
         description switch
         {
+            Func<ConsumerDelegate, ConsumerDelegate> middleware => next => (context, ct) =>
+            {
+                var nonGenericDelegate = (ConsumerDelegate)((nonGenericContext, cancellationToken) =>
+                    next(ConsumerContext<TMessage>.From(nonGenericContext), cancellationToken));
+                var resultingDelegate = middleware(nonGenericDelegate);
+                return resultingDelegate(context, ct);
+            },
             (Type type, object[]) when typeof(IConsumerMiddleware).GetTypeInfo()
                 .IsAssignableFrom(type.GetTypeInfo()) => next => (context, ct) =>
             {

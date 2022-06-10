@@ -35,7 +35,7 @@ public class RabbitProducerShould : IClassFixture<RabbitProducerFixture>
 
         consumer.Subscribe();
 
-        await Task.Delay(10000);
+        await Task.Delay(1000);
 
         caller.Verify(c => c.Call("test-message"), Times.Once);
         caller.VerifyNoOtherCalls();
