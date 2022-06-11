@@ -4,7 +4,7 @@ using RMQ.Client.Abstractions.Producing;
 
 namespace RMQ.Client.Defaults;
 
-internal class DefaultBodyEncodingMiddleware : IProducerMiddleware, IConsumerMiddleware
+public class DefaultBodyEncodingMiddleware : IProducerMiddleware, IConsumerMiddleware
 {
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
 

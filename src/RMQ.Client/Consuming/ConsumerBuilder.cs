@@ -60,30 +60,38 @@ internal class ConsumerBuilder : IConsumerBuilder
             (Type type, object[]) when typeof(IConsumerMiddleware).GetTypeInfo()
                 .IsAssignableFrom(type.GetTypeInfo()) => next => (context, ct) =>
             {
+                // Interface typed middleware
                 var middleware = (IConsumerMiddleware)context.ServiceProvider.GetRequiredService(type);
                 return middleware.InvokeAsync(context, next, ct);
             },
             (Type type, object[] args) => next =>
             {
+                // Conventional middleware, duck-typed
                 var methodInfo = type.GetMethod(nameof(IConsumerMiddleware.InvokeAsync),
                     BindingFlags.Instance | BindingFlags.Public);
-
-                if (methodInfo is null)
-                {
-                    throw new InvalidOperationException();
-                }
+                if (methodInfo is null) throw new InvalidOperationException();
+                if (!methodInfo.IsGenericMethod) throw new InvalidOperationException();
 
                 var parameters = methodInfo.GetParameters();
-                if (parameters.Length < 2 ||
-                    parameters.Last().ParameterType != typeof(CancellationToken))
-                {
-                    throw new InvalidOperationException();
-                }
+                if (parameters.Length < 2) throw new InvalidOperationException();
+                if (parameters.Last().ParameterType != typeof(CancellationToken)) throw new InvalidOperationException();
+
+                var genericArguments = methodInfo.GetGenericArguments();
+                if (genericArguments.Length != 1) throw new InvalidOperationException();
+
+                var genericParameterConstraints = genericArguments[0].GetGenericParameterConstraints();
+                if (genericParameterConstraints.Length > 0) throw new InvalidOperationException();
+
+                var firstParameter = parameters.First().ParameterType;
+                if (!firstParameter.IsGenericType) throw new InvalidOperationException();
+                if (firstParameter.GetGenericTypeDefinition() != typeof(ConsumerContext<>)) throw new InvalidOperationException();
+                if (firstParameter.GetGenericArguments()[0] != genericArguments[0]) throw new InvalidOperationException();
 
                 var constructorArgs = new object[args.Length + 1];
                 constructorArgs[0] = next;
                 Array.Copy(args, 0, constructorArgs, 1, args.Length);
                 var instance = ActivatorUtilities.CreateInstance(ServiceProvider, type, constructorArgs);
+
                 if (parameters.Length == 2)
                 {
                     var consumerDelegate = methodInfo.CreateDelegate(typeof(ConsumerDelegate<TMessage>), instance);

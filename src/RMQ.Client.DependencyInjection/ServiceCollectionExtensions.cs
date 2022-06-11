@@ -15,6 +15,15 @@ namespace RMQ.Client.DependencyInjection;
 /// </summary>
 public static class ServiceCollectionExtensions
 {
+    /// <summary>
+    /// Register required dependencies for RMQ Client
+    /// <remarks>If you don't want to use default <see cref="DefaultBodyEncodingMiddleware" /> for either consumer or producer, you can use <see cref="IProducerBuilder.Flush" /> method of the builder in defaults factory parameters</remarks>
+    /// </summary>
+    /// <param name="services">Service collection</param>
+    /// <param name="parameters">MQ connection parameters</param>
+    /// <param name="producerBuilderDefaults">Default producer builder settings, adds <see cref="DefaultBodyEncodingMiddleware" /> by default</param>
+    /// <param name="consumerBuilderDefaults">Default consumer builder settings, adds <see cref="DefaultBodyEncodingMiddleware" /> by default</param>
+    /// <returns>Service collection itself for chaining</returns>
     public static IServiceCollection AddRmqClient(
         this IServiceCollection services,
         RabbitConnectionParameters parameters,
@@ -32,9 +41,9 @@ public static class ServiceCollectionExtensions
             .WithMiddleware<DefaultBodyEncodingMiddleware>();
         services.AddTransient(provider => producerBuilderDefaults(new ProducerBuilder(provider)));
 
-        consumerBuilderDefaults ??= builder => builder
-            .WithMiddleware<DefaultBodyEncodingMiddleware>();
-        services.AddTransient(provider => consumerBuilderDefaults(new ConsumerBuilder(provider)));
+        consumerBuilderDefaults ??= builder => builder;
+        services.AddTransient(provider => consumerBuilderDefaults(new ConsumerBuilder(provider)
+            .WithMiddleware<DefaultBodyEncodingMiddleware>()));
 
         return services;
     }

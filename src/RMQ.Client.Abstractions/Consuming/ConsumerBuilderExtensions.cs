@@ -9,10 +9,10 @@ public static class ConsumerBuilderExtensions
     /// Add middleware of certain type to the pipeline
     /// </summary>
     /// <param name="builder">Consumer builder</param>
-    /// <param name="args">Middleware constructor parameters</param>
+    /// <param name="args">Middleware constructor parameters that cannot be resolved by <see cref="IServiceProvider" /></param>
     /// <typeparam name="TMiddleware">Consumer middleware</typeparam>
-    /// <returns></returns>
+    /// <returns>Builder itself for chaining</returns>
     public static IConsumerBuilder WithMiddleware<TMiddleware>(
         this IConsumerBuilder builder, params object[] args) =>
-        builder.WithMiddleware(typeof(TMiddleware), args);
+        builder.WithMiddleware(typeof(TMiddleware));
 }
