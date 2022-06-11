@@ -39,7 +39,7 @@ internal class Consumer<TMessage, TProcessor> : IConsumer
         this.parameters = parameters;
         this.logger = logger;
 
-        pipeline = middlewares.Aggregate(
+        pipeline = middlewares.Reverse().Aggregate(
             (ConsumerDelegate<TMessage>)((context, ct) =>
             {
                 var processor = context.ServiceProvider.GetRequiredService<TProcessor>();
