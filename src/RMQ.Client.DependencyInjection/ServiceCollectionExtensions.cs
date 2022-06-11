@@ -37,9 +37,9 @@ public static class ServiceCollectionExtensions
             .AddSingleton<IConsumerChannelPool, ChannelPool>()
             .AddScoped<DefaultBodyEncodingMiddleware>();
 
-        producerBuilderDefaults ??= builder => builder
-            .WithMiddleware<DefaultBodyEncodingMiddleware>();
-        services.AddTransient(provider => producerBuilderDefaults(new ProducerBuilder(provider)));
+        producerBuilderDefaults ??= builder => builder;
+        services.AddTransient(provider => producerBuilderDefaults(new ProducerBuilder(provider)
+            .WithMiddleware<DefaultBodyEncodingMiddleware>()));
 
         consumerBuilderDefaults ??= builder => builder;
         services.AddTransient(provider => consumerBuilderDefaults(new ConsumerBuilder(provider)
