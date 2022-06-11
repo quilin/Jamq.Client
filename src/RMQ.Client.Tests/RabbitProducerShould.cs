@@ -18,19 +18,22 @@ public class RabbitProducerShould : IClassFixture<RabbitProducerFixture>
         this.fixture = fixture;
         caller = new Mock<ITestCaller>();
         caller.Setup(c => c.Call(It.IsAny<string>()));
+        fixture.ServiceCollection.AddTransient<TestInterfaceMiddleware>();
         fixture.ServiceCollection.AddSingleton(new TestProcessor(testOutputHelper, caller.Object));
+        fixture.ServiceCollection.AddSingleton(caller.Object);
     }
 
     [Fact]
     public async Task PublishEncodedMessage()
     {
+        var consumerBuilder = fixture.GetConsumerBuilder();
+        var rabbitConsumerParameters = new RabbitConsumerParameters(
+            "test-consumer", "test-queue", ProcessingOrder.Sequential);
+
         var producerBuilder = fixture.GetProducerBuilder();
         using var producer = producerBuilder.BuildRabbit(new RabbitProducerParameters("test-exchange"));
         await producer.Send("whatever", "test-message", CancellationToken.None);
 
-        var consumerBuilder = fixture.GetConsumerBuilder();
-        var rabbitConsumerParameters = new RabbitConsumerParameters(
-            "test-consumer", "test-queue", ProcessingOrder.Sequential);
         using var consumer = consumerBuilder.BuildRabbit<TestProcessor, string>(rabbitConsumerParameters);
 
         consumer.Subscribe();
@@ -38,7 +41,31 @@ public class RabbitProducerShould : IClassFixture<RabbitProducerFixture>
         await Task.Delay(1000);
 
         caller.Verify(c => c.Call("test-message"), Times.Once);
+        caller.Verify(c => c.Call("middlewared test-message"), Times.Once);
         caller.VerifyNoOtherCalls();
+    }
+
+    public class TestInterfaceMiddleware : IConsumerMiddleware
+    {
+        private readonly ITestCaller testCaller;
+
+        public TestInterfaceMiddleware(ITestCaller testCaller)
+        {
+            this.testCaller = testCaller;
+        }
+
+        public async Task<ProcessResult> InvokeAsync<TMessage>(
+            ConsumerContext<TMessage> context,
+            ConsumerDelegate<TMessage> next,
+            CancellationToken cancellationToken)
+        {
+            testCaller.Call(context.Message switch
+            {
+                string m => $"middlewared {m}",
+                _ => string.Empty
+            });
+            return await next(context, cancellationToken);
+        }
     }
 
     private class TestProcessor : IProcessor<string>
