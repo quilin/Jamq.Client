@@ -14,5 +14,5 @@ public static class ConsumerBuilderExtensions
     /// <returns>Builder itself for chaining</returns>
     public static IConsumerBuilder WithMiddleware<TMiddleware>(
         this IConsumerBuilder builder, params object[] args) =>
-        builder.WithMiddleware(typeof(TMiddleware));
+        builder.WithMiddleware(typeof(TMiddleware), args);
 }

@@ -88,7 +88,8 @@ internal class ConsumerBuilder : IConsumerBuilder
                 if (firstParameter.GetGenericArguments()[0] != genericArguments[0]) throw new InvalidOperationException();
 
                 var constructorArgs = new object[args.Length + 1];
-                constructorArgs[0] = next;
+                constructorArgs[0] = (ConsumerDelegate)((nonGenericContext, cancellationToken) =>
+                    next(ConsumerContext<TMessage>.From(nonGenericContext), cancellationToken));
                 Array.Copy(args, 0, constructorArgs, 1, args.Length);
                 var instance = ActivatorUtilities.CreateInstance(ServiceProvider, type, constructorArgs);
 
@@ -105,10 +106,10 @@ internal class ConsumerBuilder : IConsumerBuilder
         };
 
     private static Func<T, ConsumerContext<TMessage>, IServiceProvider, CancellationToken, Task<ProcessResult>>
-        Compile<T, TMessage>(MethodInfo methodInfo, IReadOnlyList<ParameterInfo> parameters)
+        Compile<T, TMessage>(MemberInfo methodInfo, IReadOnlyList<ParameterInfo> parameters)
     {
         var middlewareType = typeof(T);
-
+        
         var consumerContextArg = Expression.Parameter(typeof(ConsumerContext<TMessage>), "context");
         var providerArg = Expression.Parameter(typeof(IServiceProvider), "serviceProvider");
         var cancellationTokenArg = Expression.Parameter(typeof(CancellationToken), "cancellationToken");
@@ -141,8 +142,10 @@ internal class ConsumerBuilder : IConsumerBuilder
             middlewareInstanceArg = Expression.Convert(middlewareInstanceArg, methodInfo.DeclaringType);
         }
 
-        var body = Expression.Call(middlewareInstanceArg, methodInfo, methodArguments);
-        var lambda = Expression.Lambda<Func<T, ConsumerContext<TMessage>, IServiceProvider, CancellationToken, Task<ProcessResult>>>(
+        var genericArgumentTypes = new[] { typeof(TMessage) };
+        var body = Expression.Call(middlewareInstanceArg, methodInfo.Name, genericArgumentTypes, methodArguments);
+        var lambda = Expression.Lambda<Func<
+            T, ConsumerContext<TMessage>, IServiceProvider, CancellationToken, Task<ProcessResult>>>(
             body, instanceArg, consumerContextArg, providerArg, cancellationTokenArg);
 
         return lambda.Compile();

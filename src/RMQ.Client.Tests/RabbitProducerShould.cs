@@ -19,6 +19,7 @@ public class RabbitProducerShould : IClassFixture<RabbitProducerFixture>
         caller = new Mock<ITestCaller>();
         caller.Setup(c => c.Call(It.IsAny<string>()));
         fixture.ServiceCollection.AddTransient<TestInterfaceMiddleware>();
+        fixture.ServiceCollection.AddTransient<TestConventionMiddleware>();
         fixture.ServiceCollection.AddSingleton(new TestProcessor(testOutputHelper, caller.Object));
         fixture.ServiceCollection.AddSingleton(caller.Object);
     }
@@ -31,10 +32,14 @@ public class RabbitProducerShould : IClassFixture<RabbitProducerFixture>
             "test-consumer", "test-queue", ProcessingOrder.Sequential);
 
         var producerBuilder = fixture.GetProducerBuilder();
-        using var producer = producerBuilder.BuildRabbit(new RabbitProducerParameters("test-exchange"));
+        using var producer = producerBuilder
+            .BuildRabbit(new RabbitProducerParameters("test-exchange"));
         await producer.Send("whatever", "test-message", CancellationToken.None);
 
-        using var consumer = consumerBuilder.BuildRabbit<TestProcessor, string>(rabbitConsumerParameters);
+        using var consumer = consumerBuilder
+            .WithMiddleware<TestInterfaceMiddleware>()
+            .WithMiddleware<TestConventionMiddleware>(5)
+            .BuildRabbit<TestProcessor, string>(rabbitConsumerParameters);
 
         consumer.Subscribe();
 
@@ -42,10 +47,11 @@ public class RabbitProducerShould : IClassFixture<RabbitProducerFixture>
 
         caller.Verify(c => c.Call("test-message"), Times.Once);
         caller.Verify(c => c.Call("middlewared test-message"), Times.Once);
+        caller.Verify(c => c.Call("conventioned test-message 5"), Times.Once);
         caller.VerifyNoOtherCalls();
     }
 
-    public class TestInterfaceMiddleware : IConsumerMiddleware
+    private class TestInterfaceMiddleware : IConsumerMiddleware
     {
         private readonly ITestCaller testCaller;
 
@@ -54,7 +60,7 @@ public class RabbitProducerShould : IClassFixture<RabbitProducerFixture>
             this.testCaller = testCaller;
         }
 
-        public async Task<ProcessResult> InvokeAsync<TMessage>(
+        public Task<ProcessResult> InvokeAsync<TMessage>(
             ConsumerContext<TMessage> context,
             ConsumerDelegate<TMessage> next,
             CancellationToken cancellationToken)
@@ -64,7 +70,35 @@ public class RabbitProducerShould : IClassFixture<RabbitProducerFixture>
                 string m => $"middlewared {m}",
                 _ => string.Empty
             });
-            return await next(context, cancellationToken);
+            return next(context, cancellationToken);
+        }
+    }
+    
+    private class TestConventionMiddleware
+    {
+        private readonly ConsumerDelegate next;
+        private readonly int number;
+
+        public TestConventionMiddleware(
+            ConsumerDelegate next,
+            int number)
+        {
+            this.next = next;
+            this.number = number;
+        }
+
+        public Task<ProcessResult> InvokeAsync<TMessage>(
+            ConsumerContext<TMessage> context,
+            ITestCaller testCaller,
+            CancellationToken cancellationToken)
+        {
+            context.StoredValues["test"] = 1;
+            testCaller.Call(context.Message switch
+            {
+                string m => $"conventioned {m} {number}",
+                _ => string.Empty
+            });
+            return next.Invoke(context, cancellationToken);
         }
     }
 

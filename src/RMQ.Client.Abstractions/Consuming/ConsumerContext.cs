@@ -10,9 +10,13 @@ public class ConsumerContext<TMessage> : ConsumerContext
     }
 
     internal static ConsumerContext<TMessage> From(ConsumerContext context) =>
-        new(context.NativeDeliverEvent, context.ServiceProvider)
+        context switch
         {
-            StoredValues = context.StoredValues
+            ConsumerContext<TMessage> genericContext => genericContext,
+            _ => new ConsumerContext<TMessage>(context.NativeDeliverEvent, context.ServiceProvider)
+            {
+                StoredValues = context.StoredValues
+            }
         };
 
     /// <summary>

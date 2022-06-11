@@ -16,9 +16,7 @@ public class RabbitProducerFixture : IDisposable
     {
         providerFactory = new DefaultServiceProviderFactory();
         ServiceCollection = providerFactory.CreateBuilder(new ServiceCollection());
-        ServiceCollection.AddRmqClient(new RabbitConnectionParameters(), null,
-            builder => builder
-                .WithMiddleware<RabbitProducerShould.TestInterfaceMiddleware>());
+        ServiceCollection.AddRmqClient(new RabbitConnectionParameters());
 
         var connectionFactory = GetServiceProvider().GetRequiredService<IConnectionFactory>();
         using var connection = connectionFactory.CreateConnection();

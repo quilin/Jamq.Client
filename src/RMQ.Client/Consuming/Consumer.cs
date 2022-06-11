@@ -40,10 +40,10 @@ internal class Consumer<TMessage, TProcessor> : IConsumer
         this.logger = logger;
 
         pipeline = middlewares.Reverse().Aggregate(
-            (ConsumerDelegate<TMessage>)((context, ct) =>
+            (ConsumerDelegate<TMessage>)((context, cancellationToken) =>
             {
                 var processor = context.ServiceProvider.GetRequiredService<TProcessor>();
-                return processor.Process(context.Message!, ct);
+                return processor.Process(context.Message!, cancellationToken);
             }),
             (current, component) => component(current));
         channelAccessor = () => connectionAccessor!.Value.ChannelAdapter.Channel;
