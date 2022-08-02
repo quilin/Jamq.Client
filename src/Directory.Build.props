@@ -1,0 +1,18 @@
+<Project>
+    <PropertyGroup>
+        <Authors>quilin</Authors>
+        <Owners>quilin</Owners>
+        <PackageTags>RabbitMQ, Client</PackageTags>
+        <RepositoryUrl>https://github.com/quilin/RMQ.Client</RepositoryUrl>
+        <PackageProjectUrl>https://github.com/quilin/RMQ.Client</PackageProjectUrl>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>$(AssemblyName).Tests</_Parameter1>
+        </AssemblyAttribute>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>DynamicProxyGenAssembly2</_Parameter1>
+        </AssemblyAttribute>
+    </ItemGroup>
+</Project>

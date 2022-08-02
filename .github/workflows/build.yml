@@ -1,0 +1,38 @@
+name: Build & test
+
+on: [ push ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dotnet-version: [ '6.0' ]
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup .NET SDK ${{ matrix.dotnet-version }}
+        uses: actions/setup-dotnet@v2
+        with:
+          dotnet-version: ${{ matrix.dotnet-version }}
+      - uses: actions/cache@v3
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget
+      - name: Install dependencies
+        run: dotnet restore src
+      - name: Build
+        run: dotnet build src --configuration Release --no-restore
+      - name: Test
+        run: dotnet test src --logger trx --results-directory "TestResults-${{ matrix.dotnet-version }}"
+      - name: Upload test results
+        uses: actions/upload-artifact@v3
+        with:
+          name: dotnet-results-${{ matrix.dotnet-version }}
+          path: TestResults-${{ matrix.dotnet-version }}
+        if: ${{ always() }}
+      - name: Pack
+        run: dotnet pack --no-build --configuration Release -p:PackageVersion=0.0.1 src

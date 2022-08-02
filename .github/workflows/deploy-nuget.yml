@@ -1,0 +1,27 @@
+name: Publish nuget package
+
+on:
+  release:
+    types: [ created ]
+
+jobs:
+  deploy:
+
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-dotnet@v2
+        with:
+          dotnet-version: '6.0.x'
+      - run: dotnet build --configuration Release src
+      - name: Create the packages
+        run: |
+          ghref=(${GITHUB_REF//\// })
+          VERSION="${ghref[2]}"
+          VERSION=${VERSION//v}
+          dotnet pack --configuration Release -p:PackageVersion=${VERSION} -o ./nupgks src
+      - name: Publish the RMQ.Client.Abstractions package to GPR
+        run: dotnet nuget push nupgks/*.nupkg --source https://api.nuget.org/v3/index.json --skip-duplicate --no-symbols --api-key ${{secrets.NUGET_API_KEY}}
