@@ -24,7 +24,7 @@ public class RabbitProducerShould : IClassFixture<RabbitProducerFixture>
         fixture.ServiceCollection.AddSingleton(caller.Object);
     }
 
-    [Fact]
+    [Fact(Skip = "Integration tests are skipped for now")]
     public async Task PublishEncodedMessage()
     {
         var consumerBuilder = fixture.GetConsumerBuilder();
