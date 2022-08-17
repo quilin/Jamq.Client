@@ -6,13 +6,13 @@ using RMQ.Client.Abstractions.Producing;
 
 namespace RMQ.Client.Tests;
 
-public class RabbitProducerShould : IClassFixture<RabbitProducerFixture>
+public class RabbitProducerShould : IClassFixture<RabbitFixture>
 {
-    private readonly RabbitProducerFixture fixture;
+    private readonly RabbitFixture fixture;
     private readonly Mock<ITestCaller> caller;
 
     public RabbitProducerShould(
-        RabbitProducerFixture fixture)
+        RabbitFixture fixture)
     {
         this.fixture = fixture;
         caller = new Mock<ITestCaller>();
@@ -21,10 +21,9 @@ public class RabbitProducerShould : IClassFixture<RabbitProducerFixture>
         fixture.ServiceCollection.AddScoped<ClientAgnosticInterfacedMiddleware>();
         fixture.ServiceCollection.AddScoped<ClientSpecificInterfacedMiddleware>();
         fixture.ServiceCollection.AddScoped<ClientSpecificWrongInterfacedMiddleware>();
-        fixture.ServiceCollection.AddScoped(typeof(GenericClientSpecificConventionalMiddleware<>));
     }
 
-    [Fact(Skip = "Integration tests are skipped for now")]
+    [Fact(Skip = "No integration tests yet")]
     public async Task PublishEncodedMessage()
     {
         var producerBuilder = fixture.GetProducerBuilder();

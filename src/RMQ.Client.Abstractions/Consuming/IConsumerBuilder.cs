@@ -6,11 +6,21 @@
 public interface IConsumerBuilder
 {
     /// <summary>
-    /// Add middleware to the pipeline
+    /// Add client-agnostic middleware to the pipeline
     /// </summary>
-    /// <param name="middleware"></param>
+    /// <param name="middleware">Middleware</param>
     /// <returns>Builder itself for changing</returns>
     IConsumerBuilder With(Func<ConsumerDelegate, ConsumerDelegate> middleware);
+
+    /// <summary>
+    /// Add client-specific middleware to the pipeline
+    /// </summary>
+    /// <param name="middleware"></param>
+    /// <typeparam name="TNativeProperties"></typeparam>
+    /// <typeparam name="TMessage"></typeparam>
+    /// <returns></returns>
+    IConsumerBuilder With<TNativeProperties, TMessage>(
+        Func<ConsumerDelegate<TNativeProperties, TMessage>, ConsumerDelegate<TNativeProperties, TMessage>> middleware);
 
     /// <summary>
     /// Add middleware to the pipeline
@@ -35,9 +45,4 @@ public interface IConsumerBuilder
     /// <returns></returns>
     IConsumer BuildRabbit<TProcessor, TMessage>(RabbitConsumerParameters parameters)
         where TProcessor : IProcessor<TMessage>;
-
-    /// <summary>
-    /// Service provider
-    /// </summary>
-    IServiceProvider ServiceProvider { get; }
 }

@@ -1,9 +1,10 @@
-﻿using System.Linq.Expressions;
-using System.Reflection;
+﻿using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using RabbitMQ.Client.Events;
 using RMQ.Client.Abstractions;
 using RMQ.Client.Abstractions.Consuming;
+using RMQ.Client.Abstractions.Exceptions;
 using RMQ.Client.Connection;
 
 namespace RMQ.Client.Consuming;
@@ -11,14 +12,21 @@ namespace RMQ.Client.Consuming;
 internal class ConsumerBuilder : IConsumerBuilder
 {
     private readonly IList<object> middlewares = new List<object>();
+    private readonly IServiceProvider serviceProvider;
 
-    public ConsumerBuilder(
-        IServiceProvider serviceProvider)
+    public ConsumerBuilder(IServiceProvider serviceProvider)
     {
-        ServiceProvider = serviceProvider;
+        this.serviceProvider = serviceProvider;
     }
 
     public IConsumerBuilder With(Func<ConsumerDelegate, ConsumerDelegate> middleware)
+    {
+        middlewares.Add(middleware);
+        return this;
+    }
+
+    public IConsumerBuilder With<TNativeProperties, TMessage>(
+        Func<ConsumerDelegate<TNativeProperties, TMessage>, ConsumerDelegate<TNativeProperties, TMessage>> middleware)
     {
         middlewares.Add(middleware);
         return this;
@@ -39,123 +47,159 @@ internal class ConsumerBuilder : IConsumerBuilder
     public IConsumer BuildRabbit<TProcessor, TMessage>(RabbitConsumerParameters parameters)
         where TProcessor : IProcessor<TMessage>
     {
-        var components = middlewares.Select(ToPipelineStep<TMessage>);
+        var components = middlewares.Select(ToPipelineStep<BasicDeliverEventArgs, TMessage>);
 
-        var channelPool = ServiceProvider.GetRequiredService<IConsumerChannelPool>();
-        var logger = ServiceProvider.GetService<ILogger<Consumer<TMessage, TProcessor>>>();
+        var channelPool = serviceProvider.GetRequiredService<IConsumerChannelPool>();
+        var logger = serviceProvider.GetService<ILogger<Consumer<TMessage, TProcessor>>>();
 
-        return new Consumer<TMessage, TProcessor>(channelPool, ServiceProvider, parameters, logger, components);
+        return new Consumer<TMessage, TProcessor>(channelPool, serviceProvider, parameters, logger, components);
     }
 
-    private Func<ConsumerDelegate<TMessage>, ConsumerDelegate<TMessage>> ToPipelineStep<TMessage>(object description) =>
-        description switch
-        {
-            Func<ConsumerDelegate, ConsumerDelegate> middleware => next => (context, ct) =>
-            {
-                var nonGenericDelegate = (ConsumerDelegate)((nonGenericContext, cancellationToken) =>
-                    next(ConsumerContext<TMessage>.From(nonGenericContext), cancellationToken));
-                var resultingDelegate = middleware(nonGenericDelegate);
-                return resultingDelegate(context, ct);
-            },
-            (Type type, object[]) when typeof(IConsumerMiddleware).GetTypeInfo()
-                .IsAssignableFrom(type.GetTypeInfo()) => next => (context, ct) =>
-            {
-                // Interface typed middleware
-                var middleware = (IConsumerMiddleware)context.ServiceProvider.GetRequiredService(type);
-                return middleware.InvokeAsync(context, next, ct);
-            },
-            (Type type, object[] args) => next =>
-            {
-                // Conventional middleware, duck-typed
-                var methodInfo = type.GetMethod(nameof(IConsumerMiddleware.InvokeAsync),
-                    BindingFlags.Instance | BindingFlags.Public);
-                if (methodInfo is null) throw new InvalidOperationException();
-                if (!methodInfo.IsGenericMethod) throw new InvalidOperationException();
-
-                var parameters = methodInfo.GetParameters();
-                if (parameters.Length < 2) throw new InvalidOperationException();
-                if (parameters.Last().ParameterType != typeof(CancellationToken)) throw new InvalidOperationException();
-
-                var genericArguments = methodInfo.GetGenericArguments();
-                if (genericArguments.Length != 1) throw new InvalidOperationException();
-
-                var genericParameterConstraints = genericArguments[0].GetGenericParameterConstraints();
-                if (genericParameterConstraints.Length > 0) throw new InvalidOperationException();
-
-                var firstParameter = parameters.First().ParameterType;
-                if (!firstParameter.IsGenericType) throw new InvalidOperationException();
-                if (firstParameter.GetGenericTypeDefinition() != typeof(ConsumerContext<>)) throw new InvalidOperationException();
-                if (firstParameter.GetGenericArguments()[0] != genericArguments[0]) throw new InvalidOperationException();
-
-                var constructorArgs = new object[args.Length + 1];
-                constructorArgs[0] = (ConsumerDelegate)((nonGenericContext, cancellationToken) =>
-                    next(ConsumerContext<TMessage>.From(nonGenericContext), cancellationToken));
-                Array.Copy(args, 0, constructorArgs, 1, args.Length);
-                var instance = ActivatorUtilities.CreateInstance(ServiceProvider, type, constructorArgs);
-
-                if (parameters.Length == 2)
-                {
-                    var consumerDelegate = methodInfo.CreateDelegate(typeof(ConsumerDelegate<TMessage>), instance);
-                    return (ConsumerDelegate<TMessage>)consumerDelegate;
-                }
-
-                var factory = Compile<object, TMessage>(methodInfo, parameters);
-                return (context, ct) => factory(instance, context, context.ServiceProvider, ct);
-            },
-            _ => throw new NotSupportedException()
-        };
-
-    private static Func<T, ConsumerContext<TMessage>, IServiceProvider, CancellationToken, Task<ProcessResult>>
-        Compile<T, TMessage>(MemberInfo methodInfo, IReadOnlyList<ParameterInfo> parameters)
+    private Func<ConsumerDelegate<TNativeProperties, TMessage>, ConsumerDelegate<TNativeProperties, TMessage>>
+        ToPipelineStep<TNativeProperties, TMessage>(object description) => description switch
     {
-        var middlewareType = typeof(T);
-        
-        var consumerContextArg = Expression.Parameter(typeof(ConsumerContext<TMessage>), "context");
-        var providerArg = Expression.Parameter(typeof(IServiceProvider), "serviceProvider");
-        var cancellationTokenArg = Expression.Parameter(typeof(CancellationToken), "cancellationToken");
-        var instanceArg = Expression.Parameter(middlewareType, "middleware");
+        // Lambda client-specific middleware
+        Func<ConsumerDelegate<TNativeProperties, TMessage>, ConsumerDelegate<TNativeProperties, TMessage>> middleware =>
+            middleware,
 
-        var methodArguments = new Expression[parameters.Count];
-        methodArguments[0] = consumerContextArg;
-        methodArguments[parameters.Count - 1] = cancellationTokenArg;
-        for (var i = 1; i < parameters.Count - 1; i++)
+        // Client-specific middleware
+        (Type type, object[]) when typeof(IConsumerMiddleware<TNativeProperties>).GetTypeInfo()
+            .IsAssignableFrom(type.GetTypeInfo()) => next => (context, cancellationToken) =>
         {
-            var parameterType = parameters[i].ParameterType;
-            if (parameterType.IsByRef)
-            {
-                throw new NotSupportedException();
-            }
+            var middleware = (IConsumerMiddleware<TNativeProperties>) context.ServiceProvider.GetRequiredService(type);
+            return middleware.InvokeAsync(context, next, cancellationToken);
+        },
 
-            var parameterTypeExpression = new Expression[]
+        // Lambda client-agnostic middleware
+        Func<ConsumerDelegate, ConsumerDelegate> clientAgnosticMiddleware => next => (context, ct) =>
+        {
+            var clientAgnosticDelegate = (ConsumerDelegate) ((clientAgnosticContext, cancellationToken) =>
+                next.Invoke((ConsumerContext<TNativeProperties, TMessage>) clientAgnosticContext, cancellationToken));
+            var resultingDelegate = clientAgnosticMiddleware(clientAgnosticDelegate);
+            return resultingDelegate(context, ct);
+        },
+
+        // Client-agnostic middleware
+        (Type type, object[]) when typeof(IConsumerMiddleware).GetTypeInfo()
+            .IsAssignableFrom(type.GetTypeInfo()) => next => (context, ct) =>
+        {
+            // Interface typed middleware
+            var middleware = (IConsumerMiddleware) context.ServiceProvider.GetRequiredService(type);
+            var clientAgnosticDelegate = (ConsumerDelegate) ((clientAgnosticContext, cancellationToken) =>
+                next.Invoke((ConsumerContext<TNativeProperties, TMessage>) clientAgnosticContext, cancellationToken));
+            return middleware.InvokeAsync(context, clientAgnosticDelegate, ct);
+        },
+
+        // Convention-based middleware
+        (Type type, object[] args) => next =>
+        {
+            var methodInfos = type.GetMethods(BindingFlags.Instance | BindingFlags.Public)
+                .Where(mi => mi.Name == nameof(IConsumerMiddleware.InvokeAsync))
+                .ToArray();
+            var methodInfo = (uint) methodInfos.Length switch
             {
-                providerArg,
-                Expression.Constant(parameterType, typeof(Type))
+                1 => methodInfos[0],
+                0 => throw ConsumerBuilderMiddlewareConventionException.NoInvokeAsyncMethod(type),
+                > 1 => throw ConsumerBuilderMiddlewareConventionException.AmbiguousInvokeAsyncMethods(type)
             };
 
-            var getServiceCall = Expression.Call(GetServiceInfo, parameterTypeExpression);
-            methodArguments[i] = Expression.Convert(getServiceCall, parameterType);
-        }
+            var parameters = methodInfo.GetParameters();
+            if (parameters.Length < 2 ||
+                parameters.Last().ParameterType != typeof(CancellationToken))
+            {
+                throw ConsumerBuilderMiddlewareConventionException.MismatchParameters(type);
+            }
 
-        Expression middlewareInstanceArg = instanceArg;
-        if (methodInfo.DeclaringType is not null && methodInfo.DeclaringType != typeof(T))
-        {
-            middlewareInstanceArg = Expression.Convert(middlewareInstanceArg, methodInfo.DeclaringType);
-        }
+            var contextParameterType = parameters[0].ParameterType;
+            if (!contextParameterType.IsAssignableTo(typeof(ConsumerContext)))
+            {
+                throw ConsumerBuilderMiddlewareConventionException.MismatchParameters(type);
+            }
 
-        var genericArgumentTypes = new[] { typeof(TMessage) };
-        var body = Expression.Call(middlewareInstanceArg, methodInfo.Name, genericArgumentTypes, methodArguments);
-        var lambda = Expression.Lambda<Func<
-            T, ConsumerContext<TMessage>, IServiceProvider, CancellationToken, Task<ProcessResult>>>(
-            body, instanceArg, consumerContextArg, providerArg, cancellationTokenArg);
+            // Default client-agnostic middleware
+            // e.g. class TMw { ctor(ConsumerDelegate){} InvokeAsync(ConsumerContext ...) }
+            if (contextParameterType == typeof(ConsumerContext))
+            {
+                var instance = GetMiddlewareInstance<ConsumerDelegate>(type, args, serviceProvider,
+                    (context, ct) => next((ConsumerContext<TNativeProperties, TMessage>) context, ct));
+                if (parameters.Length == 2)
+                {
+                    return methodInfo.CreateDelegate<ConsumerDelegate>(instance).Invoke;
+                }
 
-        return lambda.Compile();
+                var factory =
+                    MiddlewareCompiler.Compile<ConsumerContext<TNativeProperties, TMessage>, Task<ProcessResult>>(
+                        methodInfo, parameters);
+                return (context, ct) => factory(instance, context, context.ServiceProvider, ct);
+            }
+
+            // Default client-specific middleware
+            // e.g. class TMw { ctor(ConsumerDelegate<Props, Message>){} InvokeAsync(ConsumerContext<Props, Message> ...) }
+            if (contextParameterType == typeof(ConsumerContext<TNativeProperties, TMessage>))
+            {
+                var instance = GetMiddlewareInstance(type, args, serviceProvider, next);
+                if (parameters.Length == 2)
+                {
+                    return methodInfo.CreateDelegate<ConsumerDelegate<TNativeProperties, TMessage>>(instance).Invoke;
+                }
+
+                var factory =
+                    MiddlewareCompiler.Compile<ConsumerContext<TNativeProperties, TMessage>, Task<ProcessResult>>(
+                        methodInfo, parameters);
+                return (context, ct) => factory(instance, context, context.ServiceProvider, ct);
+            }
+            
+            // Generic client-agnostic middleware
+            // e.g. class TMw { ctor(ConsumerDelegate){} InvokeAsync<TProps, TMessage>(ConsumerContext<TProps, TMessage> ...) }
+            if (contextParameterType.GetGenericTypeDefinition() == typeof(ConsumerContext<,>) &&
+                methodInfo.IsGenericMethod &&
+                methodInfo.GetGenericArguments().SequenceEqual(contextParameterType.GetGenericArguments()))
+            {
+                var instance = GetMiddlewareInstance<ConsumerDelegate>(type, args, serviceProvider,
+                    (context, ct) => next((ConsumerContext<TNativeProperties, TMessage>) context, ct));
+                if (parameters.Length == 2)
+                {
+                    return methodInfo.CreateDelegate<ConsumerDelegate<TNativeProperties, TMessage>>(instance).Invoke;
+                }
+
+                var factory =
+                    MiddlewareCompiler.Compile<ConsumerContext<TNativeProperties, TMessage>, Task<ProcessResult>>(
+                        methodInfo, parameters);
+                return (context, ct) => factory(instance, context, context.ServiceProvider, ct);
+            }
+            
+            // Generic client-agnostic middleware class-based
+            // e.g. class TMw<TProps, TMessage> { ctor(ConsumerDelegate<TProps, TMessage>){} { InvokeAsync(ConsumerContext<TProps, TMessage> ... ) }
+            if (contextParameterType.GetGenericTypeDefinition() == typeof(ConsumerContext<,>) &&
+                type.IsGenericType &&
+                type.GetGenericArguments().SequenceEqual(contextParameterType.GetGenericArguments()))
+            {
+                var genericType = type.GetGenericTypeDefinition()
+                    .MakeGenericType(typeof(TNativeProperties), typeof(TMessage));
+                var instance = GetMiddlewareInstance(genericType, args, serviceProvider, next);
+                if (parameters.Length == 2)
+                {
+                    return methodInfo.CreateDelegate<ConsumerDelegate<TNativeProperties, TMessage>>(instance).Invoke;
+                }
+
+                var factory =
+                    MiddlewareCompiler.Compile<ConsumerContext<TNativeProperties, TMessage>, Task<ProcessResult>>(
+                        methodInfo, parameters);
+                return (context, ct) => factory(instance, context, context.ServiceProvider, ct);
+            }
+
+            // if we cannot recognise the middleware, we simply skip it
+            return next;
+        },
+        _ => throw new NotSupportedException()
+    };
+
+    private static object GetMiddlewareInstance<TConsumerDelegate>(
+        Type type, object[] args, IServiceProvider serviceProvider, TConsumerDelegate consumerDelegate)
+    {
+        var constructorArgs = new object[args.Length + 1];
+        constructorArgs[0] = consumerDelegate!;
+        Array.Copy(args, 0, constructorArgs, 1, args.Length);
+        return ActivatorUtilities.CreateInstance(serviceProvider, type, constructorArgs);
     }
-
-    private static object GetService(IServiceProvider serviceProvider, Type type) =>
-        serviceProvider.GetRequiredService(type);
-
-    private static readonly MethodInfo GetServiceInfo = typeof(ConsumerBuilder)
-        .GetMethod(nameof(GetService), BindingFlags.NonPublic | BindingFlags.Static)!;
-
-    public IServiceProvider ServiceProvider { get; }
 }
