@@ -1,8 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
+using RabbitMQ.Client;
 using RMQ.Client.Abstractions;
-using RMQ.Client.Abstractions.Consuming;
-using Xunit.Abstractions;
+using RMQ.Client.Abstractions.Producing;
 
 namespace RMQ.Client.Tests;
 
@@ -12,117 +12,175 @@ public class RabbitProducerShould : IClassFixture<RabbitProducerFixture>
     private readonly Mock<ITestCaller> caller;
 
     public RabbitProducerShould(
-        RabbitProducerFixture fixture,
-        ITestOutputHelper testOutputHelper)
+        RabbitProducerFixture fixture)
     {
         this.fixture = fixture;
         caller = new Mock<ITestCaller>();
         caller.Setup(c => c.Call(It.IsAny<string>()));
-        fixture.ServiceCollection.AddTransient<TestInterfaceMiddleware>();
-        fixture.ServiceCollection.AddTransient<TestConventionMiddleware>();
-        fixture.ServiceCollection.AddSingleton(new TestProcessor(testOutputHelper, caller.Object));
         fixture.ServiceCollection.AddSingleton(caller.Object);
+        fixture.ServiceCollection.AddScoped<ClientAgnosticInterfacedMiddleware>();
+        fixture.ServiceCollection.AddScoped<ClientSpecificInterfacedMiddleware>();
+        fixture.ServiceCollection.AddScoped<ClientSpecificWrongInterfacedMiddleware>();
+        fixture.ServiceCollection.AddScoped(typeof(GenericClientSpecificConventionalMiddleware<>));
     }
 
     [Fact(Skip = "Integration tests are skipped for now")]
     public async Task PublishEncodedMessage()
     {
-        var consumerBuilder = fixture.GetConsumerBuilder();
-        var rabbitConsumerParameters = new RabbitConsumerParameters(
-            "test-consumer", "test-queue", ProcessingOrder.Sequential);
-
         var producerBuilder = fixture.GetProducerBuilder();
         using var producer = producerBuilder
+            .With(next => context =>
+            {
+                caller.Object.Call("ClientAgnosticLambdaMiddleware");
+                return next(context);
+            })
+            .With<IBasicProperties>(next => context =>
+            {
+                caller.Object.Call("ClientSpecificLambdaMiddleware");
+                return next(context);
+            })
+            .WithMiddleware<ClientAgnosticInterfacedMiddleware>()
+            .WithMiddleware<ClientSpecificInterfacedMiddleware>()
+            .WithMiddleware<ClientAgnosticConventionalMiddleware>()
+            .WithMiddleware<ClientSpecificConventionalMiddleware>()
+            .WithMiddleware<ClientSpecificWrongInterfacedMiddleware>()
+            .WithMiddleware(typeof(GenericClientSpecificConventionalMiddleware<>))
+            .WithMiddleware<GenericClientSpecificConventionalMiddleware>()
             .BuildRabbit(new RabbitProducerParameters("test-exchange"));
         await producer.Send("whatever", "test-message", CancellationToken.None);
 
-        using var consumer = consumerBuilder
-            .WithMiddleware<TestInterfaceMiddleware>()
-            .WithMiddleware<TestConventionMiddleware>(5)
-            .BuildRabbit<TestProcessor, string>(rabbitConsumerParameters);
-
-        consumer.Subscribe();
-
-        await Task.Delay(1000);
-
-        caller.Verify(c => c.Call("test-message"), Times.Once);
-        caller.Verify(c => c.Call("middlewared test-message"), Times.Once);
-        caller.Verify(c => c.Call("conventioned test-message 5"), Times.Once);
+        caller.Verify(c => c.Call("ClientAgnosticLambdaMiddleware"));
+        caller.Verify(c => c.Call("ClientSpecificLambdaMiddleware"));
+        caller.Verify(c => c.Call("ClientAgnosticInterfacedMiddleware"));
+        caller.Verify(c => c.Call("ClientSpecificInterfacedMiddleware"));
+        caller.Verify(c => c.Call("ClientAgnosticConventionalMiddleware"));
+        caller.Verify(c => c.Call("ClientSpecificConventionalMiddleware"));
+        caller.Verify(c => c.Call("GenericClientSpecificConventionalMiddleware with IBasicProperties"));
+        caller.Verify(c => c.Call("GenericClientSpecificConventionalMiddleware"));
         caller.VerifyNoOtherCalls();
     }
-
-    private class TestInterfaceMiddleware : IConsumerMiddleware
+    
+    private class ClientAgnosticInterfacedMiddleware : IProducerMiddleware
     {
         private readonly ITestCaller testCaller;
 
-        public TestInterfaceMiddleware(ITestCaller testCaller)
+        public ClientAgnosticInterfacedMiddleware(ITestCaller testCaller)
         {
             this.testCaller = testCaller;
         }
 
-        public Task<ProcessResult> InvokeAsync<TMessage>(
-            ConsumerContext<TMessage> context,
-            ConsumerDelegate<TMessage> next,
-            CancellationToken cancellationToken)
+        public Task InvokeAsync(ProducerContext context, ProducerDelegate next)
         {
-            testCaller.Call(context.Message switch
+            testCaller.Call(nameof(ClientAgnosticInterfacedMiddleware));
+            return next(context);
+        }
+    }
+    private class ClientSpecificInterfacedMiddleware : IProducerMiddleware<IBasicProperties>
+    {
+        private readonly ITestCaller testCaller;
+
+        public ClientSpecificInterfacedMiddleware(ITestCaller testCaller)
+        {
+            this.testCaller = testCaller;
+        }
+
+        public Task InvokeAsync(ProducerContext<IBasicProperties> context, ProducerDelegate<IBasicProperties> next)
+        {
+            testCaller.Call(nameof(ClientSpecificInterfacedMiddleware));
+            return next(context);
+        }
+    }
+    private class ClientSpecificWrongInterfacedMiddleware : IProducerMiddleware<string>
+    {
+        private readonly ITestCaller testCaller;
+
+        public ClientSpecificWrongInterfacedMiddleware(ITestCaller testCaller)
+        {
+            this.testCaller = testCaller;
+        }
+        
+        public Task InvokeAsync(ProducerContext<string> context, ProducerDelegate<string> next)
+        {
+            testCaller.Call(nameof(ClientSpecificWrongInterfacedMiddleware));
+            return next(context);
+        }
+    }
+    private class ClientAgnosticConventionalMiddleware
+    {
+        private readonly ProducerDelegate next;
+
+        public ClientAgnosticConventionalMiddleware(
+            ProducerDelegate next)
+        {
+            this.next = next;
+        }
+
+        public Task InvokeAsync(
+            ProducerContext context,
+            ITestCaller testCaller)
+        {
+            testCaller.Call(nameof(ClientAgnosticConventionalMiddleware));
+            return next(context);
+        }
+    }
+    private class ClientSpecificConventionalMiddleware
+    {
+        private readonly ProducerDelegate<IBasicProperties> next;
+
+        public ClientSpecificConventionalMiddleware(
+            ProducerDelegate<IBasicProperties> next)
+        {
+            this.next = next;
+        }
+
+        public Task InvokeAsync(
+            ProducerContext<IBasicProperties> context,
+            ITestCaller testCaller)
+        {
+            if (context.NativeProperties is not null)
             {
-                string m => $"middlewared {m}",
-                _ => string.Empty
-            });
-            return next(context, cancellationToken);
+                context.NativeProperties.Persistent = true;
+            }
+
+            testCaller.Call(nameof(ClientSpecificConventionalMiddleware));
+            return next(context);
+        }
+    }
+    private class GenericClientSpecificConventionalMiddleware<TNativeProperties>
+    {
+        private readonly ProducerDelegate<TNativeProperties> next;
+
+        public GenericClientSpecificConventionalMiddleware(ProducerDelegate<TNativeProperties> next)
+        {
+            this.next = next;
+        }
+
+        public Task InvokeAsync(
+            ProducerContext<TNativeProperties> context,
+            ITestCaller testCaller)
+        {
+            testCaller.Call($"{nameof(GenericClientSpecificConventionalMiddleware<TNativeProperties>)} with {typeof(TNativeProperties).Name}");
+            return next(context);
+        }
+    }
+    private class GenericClientSpecificConventionalMiddleware
+    {
+        private readonly ProducerDelegate next;
+
+        public GenericClientSpecificConventionalMiddleware(ProducerDelegate next)
+        {
+            this.next = next;
+        }
+
+        public Task InvokeAsync<TNativeProperties>(
+            ProducerContext<TNativeProperties> context,
+            ITestCaller testCaller)
+        {
+            testCaller.Call(nameof(GenericClientSpecificConventionalMiddleware));
+            return next(context);
         }
     }
     
-    private class TestConventionMiddleware
-    {
-        private readonly ConsumerDelegate next;
-        private readonly int number;
-
-        public TestConventionMiddleware(
-            ConsumerDelegate next,
-            int number)
-        {
-            this.next = next;
-            this.number = number;
-        }
-
-        public Task<ProcessResult> InvokeAsync<TMessage>(
-            ConsumerContext<TMessage> context,
-            ITestCaller testCaller,
-            CancellationToken cancellationToken)
-        {
-            context.StoredValues["test"] = 1;
-            testCaller.Call(context.Message switch
-            {
-                string m => $"conventioned {m} {number}",
-                _ => string.Empty
-            });
-            return next.Invoke(context, cancellationToken);
-        }
-    }
-
-    private class TestProcessor : IProcessor<string>
-    {
-        private readonly ITestOutputHelper testOutputHelper;
-        private readonly ITestCaller caller;
-
-        public TestProcessor(
-            ITestOutputHelper testOutputHelper,
-            ITestCaller caller)
-        {
-            this.testOutputHelper = testOutputHelper;
-            this.caller = caller;
-        }
-
-        public Task<ProcessResult> Process(string message, CancellationToken cancellationToken)
-        {
-            testOutputHelper.WriteLine($"Incoming: {message}");
-            caller.Call(message);
-            return Task.FromResult(ProcessResult.Success);
-        }
-    }
-
     public interface ITestCaller
     {
         void Call(string message);

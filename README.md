@@ -159,6 +159,64 @@ public void ConfigureServices(IServiceCollection services)
 
 Now every time you inject the `IProducerBuilder` it will come from this enrichment factory.
 
+#### Client-agnostic and client-aware producer middleware
+
+By default, all producer middlewares are client agnostic, which means But what if you want to interact with the underlying client directly from the middleware? For example to put the correlation token into the message headers. In this case you might want to create the client-aware middleware:
+```csharp
+public class CorrelationEnrichmentMiddleware : IProducerMiddleware<IBasicProperties>
+{
+    private readonly ICorrelationTokenProvider correlationTokenProvider;
+
+    public CorrelationEnrichmentMiddleware(ICorrelationTokenProvier correlationTokenProvider)
+    {
+        this.correlationTokenProvider = correlationTokenProvider;
+    }
+    
+    public async Task InvokeAsync(
+        ProducerContext<IBasicProperties> context,
+        ProducerDelegate<IBasicProperties> next)
+    {
+        context.NativeProperties.CorrelationId = correlationTokenProvider.Current;
+        await next(context);
+    }
+}
+```
+
+When you add such a middleware to the builder, you do not expect it to be a part of a pipeline for other clients. But what if you want your middleware to be client-aware and generic at the same time?
+
+```csharp
+public class GenericCorrelationEnrichmentMiddleware<TNativeProperties>
+    : IProducerMiddleware<TNativeProperties>
+{
+    private readonly ICorrelationTokenProvider correlationTokenProvider;
+
+    public CorrelationEnrichmentMiddleware(ICorrelationTokenProvier correlationTokenProvider)
+    {
+        this.correlationTokenProvider = correlationTokenProvider;
+    }
+    
+    public async Task InvokeAsync(
+        ProducerContext<TNativeProperties> context,
+        ProducerDelegate<TNativeProperties> next)
+    {
+        if (typeof(TNativeProperties).IsAssignableFrom(typeof(IBasicProperties))
+        {
+            context.NativeProperties.CorrelationId = correlationTokenProvider.Current;
+        }
+
+        await next(context);
+    }
+}
+```
+
+In this case it would be impossible to add the middleware to pipeline with generic `WithMiddleware<>` method and you will have to use
+
+```csharp
+producerBuilder.WithMiddleware(typeof(GenericCorrelationEnrichmentMiddleware<>))
+```
+
+Open generic types will be automatically instantiated with certain `TNativeProperties` type declaration on `.BuildRabbit()`.
+
 #### TODOs
 1. Cancellation token for middlewares
 2. Generic producer context to contain the typed message
