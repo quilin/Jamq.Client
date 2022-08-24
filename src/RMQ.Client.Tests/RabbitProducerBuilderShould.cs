@@ -1,17 +1,19 @@
+using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using RabbitMQ.Client;
 using RMQ.Client.Abstractions;
+using RMQ.Client.Abstractions.Exceptions;
 using RMQ.Client.Abstractions.Producing;
 
 namespace RMQ.Client.Tests;
 
-public class RabbitProducerShould : IClassFixture<RabbitFixture>
+public class RabbitProducerBuilderShould : IClassFixture<RabbitFixture>
 {
     private readonly RabbitFixture fixture;
     private readonly Mock<ITestCaller> caller;
 
-    public RabbitProducerShould(
+    public RabbitProducerBuilderShould(
         RabbitFixture fixture)
     {
         this.fixture = fixture;
@@ -23,20 +25,41 @@ public class RabbitProducerShould : IClassFixture<RabbitFixture>
         fixture.ServiceCollection.AddScoped<ClientSpecificWrongInterfacedMiddleware>();
     }
 
-    [Fact(Skip = "No integration tests yet")]
-    public async Task PublishEncodedMessage()
+    public static IEnumerable<object[]> InvalidMiddlewares()
     {
+        yield return new object[] {typeof(InvalidConventionMiddleware_NoInvokeMethod)};
+        yield return new object[] {typeof(InvalidConventionMiddleware_AmbiguousInvokeMethods)};
+        yield return new object[] {typeof(InvalidConventionMiddleware_MismatchParameters_Number)};
+        yield return new object[] {typeof(InvalidConventionMiddleware_MismatchParameters_Context)};
+        yield return new object[] {typeof(InvalidConventionMiddleware_MismatchParameters_CancellationToken)};
+    }
+
+    [Theory]
+    [MemberData(nameof(InvalidMiddlewares))]
+    public void Throw_WhenInvalidMiddlewaresAdded(Type middleware)
+    {
+        var producerBuilder = fixture.GetProducerBuilder()
+            .WithMiddleware(middleware);
+        producerBuilder.Invoking(b => b.BuildRabbit(new RabbitProducerParameters("test-exchange")))
+            .Should().Throw<ProducerBuilderMiddlewareConventionException>();
+    }
+
+    [Fact(Skip = "No integration tests yet")]
+    public async Task IncludeAllMatchingMiddlewares()
+    {
+        fixture.CreateTopology();
+
         var producerBuilder = fixture.GetProducerBuilder();
         using var producer = producerBuilder
-            .With(next => context =>
+            .With(next => (context, ct) =>
             {
                 caller.Object.Call("ClientAgnosticLambdaMiddleware");
-                return next(context);
+                return next(context, ct);
             })
-            .With<IBasicProperties>(next => context =>
+            .With<IBasicProperties>(next => (context, ct) =>
             {
                 caller.Object.Call("ClientSpecificLambdaMiddleware");
-                return next(context);
+                return next(context, ct);
             })
             .WithMiddleware<ClientAgnosticInterfacedMiddleware>()
             .WithMiddleware<ClientSpecificInterfacedMiddleware>()
@@ -57,8 +80,10 @@ public class RabbitProducerShould : IClassFixture<RabbitFixture>
         caller.Verify(c => c.Call("GenericClientSpecificConventionalMiddleware with IBasicProperties"));
         caller.Verify(c => c.Call("GenericClientSpecificConventionalMiddleware"));
         caller.VerifyNoOtherCalls();
+
+        fixture.ClearTopology();
     }
-    
+
     private class ClientAgnosticInterfacedMiddleware : IProducerMiddleware
     {
         private readonly ITestCaller testCaller;
@@ -68,12 +93,13 @@ public class RabbitProducerShould : IClassFixture<RabbitFixture>
             this.testCaller = testCaller;
         }
 
-        public Task InvokeAsync(ProducerContext context, ProducerDelegate next)
+        public Task InvokeAsync(ProducerContext context, ProducerDelegate next, CancellationToken cancellationToken)
         {
             testCaller.Call(nameof(ClientAgnosticInterfacedMiddleware));
-            return next(context);
+            return next(context, cancellationToken);
         }
     }
+
     private class ClientSpecificInterfacedMiddleware : IProducerMiddleware<IBasicProperties>
     {
         private readonly ITestCaller testCaller;
@@ -83,12 +109,16 @@ public class RabbitProducerShould : IClassFixture<RabbitFixture>
             this.testCaller = testCaller;
         }
 
-        public Task InvokeAsync(ProducerContext<IBasicProperties> context, ProducerDelegate<IBasicProperties> next)
+        public Task InvokeAsync(
+            ProducerContext<IBasicProperties> context,
+            ProducerDelegate<IBasicProperties> next,
+            CancellationToken cancellationToken)
         {
             testCaller.Call(nameof(ClientSpecificInterfacedMiddleware));
-            return next(context);
+            return next(context, cancellationToken);
         }
     }
+
     private class ClientSpecificWrongInterfacedMiddleware : IProducerMiddleware<string>
     {
         private readonly ITestCaller testCaller;
@@ -97,13 +127,17 @@ public class RabbitProducerShould : IClassFixture<RabbitFixture>
         {
             this.testCaller = testCaller;
         }
-        
-        public Task InvokeAsync(ProducerContext<string> context, ProducerDelegate<string> next)
+
+        public Task InvokeAsync(
+            ProducerContext<string> context,
+            ProducerDelegate<string> next,
+            CancellationToken cancellationToken)
         {
             testCaller.Call(nameof(ClientSpecificWrongInterfacedMiddleware));
-            return next(context);
+            return next(context, cancellationToken);
         }
     }
+
     private class ClientAgnosticConventionalMiddleware
     {
         private readonly ProducerDelegate next;
@@ -116,12 +150,14 @@ public class RabbitProducerShould : IClassFixture<RabbitFixture>
 
         public Task InvokeAsync(
             ProducerContext context,
-            ITestCaller testCaller)
+            ITestCaller testCaller,
+            CancellationToken cancellationToken)
         {
             testCaller.Call(nameof(ClientAgnosticConventionalMiddleware));
-            return next(context);
+            return next(context, cancellationToken);
         }
     }
+
     private class ClientSpecificConventionalMiddleware
     {
         private readonly ProducerDelegate<IBasicProperties> next;
@@ -134,7 +170,8 @@ public class RabbitProducerShould : IClassFixture<RabbitFixture>
 
         public Task InvokeAsync(
             ProducerContext<IBasicProperties> context,
-            ITestCaller testCaller)
+            ITestCaller testCaller,
+            CancellationToken cancellationToken)
         {
             if (context.NativeProperties is not null)
             {
@@ -142,9 +179,10 @@ public class RabbitProducerShould : IClassFixture<RabbitFixture>
             }
 
             testCaller.Call(nameof(ClientSpecificConventionalMiddleware));
-            return next(context);
+            return next(context, cancellationToken);
         }
     }
+
     private class GenericClientSpecificConventionalMiddleware<TNativeProperties>
     {
         private readonly ProducerDelegate<TNativeProperties> next;
@@ -156,12 +194,15 @@ public class RabbitProducerShould : IClassFixture<RabbitFixture>
 
         public Task InvokeAsync(
             ProducerContext<TNativeProperties> context,
-            ITestCaller testCaller)
+            ITestCaller testCaller,
+            CancellationToken cancellationToken)
         {
-            testCaller.Call($"{nameof(GenericClientSpecificConventionalMiddleware<TNativeProperties>)} with {typeof(TNativeProperties).Name}");
-            return next(context);
+            testCaller.Call(
+                $"{nameof(GenericClientSpecificConventionalMiddleware<TNativeProperties>)} with {typeof(TNativeProperties).Name}");
+            return next(context, cancellationToken);
         }
     }
+
     private class GenericClientSpecificConventionalMiddleware
     {
         private readonly ProducerDelegate next;
@@ -173,13 +214,77 @@ public class RabbitProducerShould : IClassFixture<RabbitFixture>
 
         public Task InvokeAsync<TNativeProperties>(
             ProducerContext<TNativeProperties> context,
-            ITestCaller testCaller)
+            ITestCaller testCaller,
+            CancellationToken cancellationToken)
         {
             testCaller.Call(nameof(GenericClientSpecificConventionalMiddleware));
-            return next(context);
+            return next(context, cancellationToken);
         }
     }
-    
+
+    private class InvalidConventionMiddleware_NoInvokeMethod
+    {
+        private readonly ProducerDelegate next;
+
+        public InvalidConventionMiddleware_NoInvokeMethod(ProducerDelegate next)
+        {
+            this.next = next;
+        }
+
+        public Task NotInvoke(ProducerContext context, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private class InvalidConventionMiddleware_AmbiguousInvokeMethods
+    {
+        private readonly ProducerDelegate next;
+
+        public InvalidConventionMiddleware_AmbiguousInvokeMethods(ProducerDelegate next)
+        {
+            this.next = next;
+        }
+
+        public Task InvokeAsync(ProducerContext context, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task InvokeAsync(ProducerContext context, ITestCaller testCaller, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+    }
+
+    private class InvalidConventionMiddleware_MismatchParameters_Context
+    {
+        private readonly ProducerDelegate next;
+
+        public InvalidConventionMiddleware_MismatchParameters_Context(ProducerDelegate next)
+        {
+            this.next = next;
+        }
+
+        public Task InvokeAsync(string context, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private class InvalidConventionMiddleware_MismatchParameters_CancellationToken
+    {
+        private readonly ProducerDelegate next;
+
+        public InvalidConventionMiddleware_MismatchParameters_CancellationToken(ProducerDelegate next)
+        {
+            this.next = next;
+        }
+
+        public Task InvokeAsync(ProducerContext context, string cancellationToken) => Task.CompletedTask;
+    }
+
+    private class InvalidConventionMiddleware_MismatchParameters_Number
+    {
+        private readonly ProducerDelegate next;
+
+        public InvalidConventionMiddleware_MismatchParameters_Number(ProducerDelegate next)
+        {
+            this.next = next;
+        }
+
+        public Task InvokeAsync() => Task.CompletedTask;
+    }
+
     public interface ITestCaller
     {
         void Call(string message);

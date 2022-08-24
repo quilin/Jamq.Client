@@ -1,21 +1,23 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using RabbitMQ.Client.Events;
 using RMQ.Client.Abstractions;
 using RMQ.Client.Abstractions.Consuming;
+using RMQ.Client.Abstractions.Exceptions;
 
 namespace RMQ.Client.Tests;
 
-public class RabbitConsumerShould : IClassFixture<RabbitFixture>
+public class RabbitConsumerBuilderShould : IClassFixture<RabbitFixture>
 {
     private readonly RabbitFixture fixture;
-    private readonly Mock<RabbitProducerShould.ITestCaller> caller;
+    private readonly Mock<RabbitProducerBuilderShould.ITestCaller> caller;
 
-    public RabbitConsumerShould(
+    public RabbitConsumerBuilderShould(
         RabbitFixture fixture)
     {
         this.fixture = fixture;
-        caller = new Mock<RabbitProducerShould.ITestCaller>();
+        caller = new Mock<RabbitProducerBuilderShould.ITestCaller>();
         caller.Setup(c => c.Call(It.IsAny<string>()));
         fixture.ServiceCollection.AddSingleton(caller.Object);
         fixture.ServiceCollection.AddScoped<Processor>();
@@ -23,19 +25,41 @@ public class RabbitConsumerShould : IClassFixture<RabbitFixture>
         fixture.ServiceCollection.AddScoped<ClientSpecificInterfacedMiddleware>();
     }
 
-    [Fact(Skip = "No integration tests yet")]
-    public async Task ConsumeMessages()
+    public static IEnumerable<object[]> InvalidMiddlewares()
     {
+        yield return new object[] {typeof(InvalidConventionMiddleware_NoInvokeMethod)};
+        yield return new object[] {typeof(InvalidConventionMiddleware_AmbiguousInvokeMethods)};
+        yield return new object[] {typeof(InvalidConventionMiddleware_MismatchParameters_Number)};
+        yield return new object[] {typeof(InvalidConventionMiddleware_MismatchParameters_Context)};
+        yield return new object[] {typeof(InvalidConventionMiddleware_MismatchParameters_CancellationToken)};
+    }
+
+    [Theory]
+    [MemberData(nameof(InvalidMiddlewares))]
+    public void Throw_WhenInvalidMiddlewaresAdded(Type middleware)
+    {
+        var producerBuilder = fixture.GetConsumerBuilder()
+            .WithMiddleware(middleware);
+        producerBuilder.Invoking(b => b.BuildRabbit<Processor, RabbitMessage>(
+                new RabbitConsumerParameters("consumer", "test-exchange", ProcessingOrder.Sequential)))
+            .Should().Throw<ConsumerBuilderMiddlewareConventionException>();
+    }
+
+    [Fact(Skip = "No integration tests yet")]
+    public async Task IncludeAllMatchingMiddlewares()
+    {
+        fixture.CreateTopology();
+
         using var consumer = fixture.GetConsumerBuilder()
             .With(next => (context, token) =>
             {
-                var testCaller = context.ServiceProvider.GetRequiredService<RabbitProducerShould.ITestCaller>();
+                var testCaller = context.ServiceProvider.GetRequiredService<RabbitProducerBuilderShould.ITestCaller>();
                 testCaller.Call("ClientAgnosticLambdaMiddleware");
                 return next.Invoke(context, token);
             })
             .With<BasicDeliverEventArgs, RabbitMessage>(next => (context, token) =>
             {
-                var testCaller = context.ServiceProvider.GetRequiredService<RabbitProducerShould.ITestCaller>();
+                var testCaller = context.ServiceProvider.GetRequiredService<RabbitProducerBuilderShould.ITestCaller>();
                 testCaller.Call("ClientSpecificLambdaMiddleware");
                 return next.Invoke(context, token);
             })
@@ -66,14 +90,16 @@ public class RabbitConsumerShould : IClassFixture<RabbitFixture>
         caller.Verify(c => c.Call("GenericClientSpecificConventionalMiddleware with BasicDeliverEventArgs, RabbitMessage"), Times.Once);
         caller.Verify(c => c.Call("message"), Times.Once);
         caller.VerifyNoOtherCalls();
+
+        fixture.ClearTopology();
     }
     
     private class ClientAgnosticInterfacedMiddleware : IConsumerMiddleware
     {
-        private readonly RabbitProducerShould.ITestCaller testCaller;
+        private readonly RabbitProducerBuilderShould.ITestCaller testCaller;
 
         public ClientAgnosticInterfacedMiddleware(
-            RabbitProducerShould.ITestCaller testCaller)
+            RabbitProducerBuilderShould.ITestCaller testCaller)
         {
             this.testCaller = testCaller;
         }
@@ -89,10 +115,10 @@ public class RabbitConsumerShould : IClassFixture<RabbitFixture>
     }
     private class ClientSpecificInterfacedMiddleware : IConsumerMiddleware<BasicDeliverEventArgs>
     {
-        private readonly RabbitProducerShould.ITestCaller testCaller;
+        private readonly RabbitProducerBuilderShould.ITestCaller testCaller;
 
         public ClientSpecificInterfacedMiddleware(
-            RabbitProducerShould.ITestCaller testCaller)
+            RabbitProducerBuilderShould.ITestCaller testCaller)
         {
             this.testCaller = testCaller;
         }
@@ -117,7 +143,7 @@ public class RabbitConsumerShould : IClassFixture<RabbitFixture>
 
         public Task<ProcessResult> InvokeAsync(
             ConsumerContext context,
-            RabbitProducerShould.ITestCaller testCaller,
+            RabbitProducerBuilderShould.ITestCaller testCaller,
             CancellationToken cancellationToken)
         {
             testCaller.Call(nameof(ClientAgnosticConventionalMiddleware));
@@ -136,7 +162,7 @@ public class RabbitConsumerShould : IClassFixture<RabbitFixture>
 
         public Task<ProcessResult> InvokeAsync(
             ConsumerContext<BasicDeliverEventArgs, RabbitMessage> context,
-            RabbitProducerShould.ITestCaller testCaller,
+            RabbitProducerBuilderShould.ITestCaller testCaller,
             CancellationToken cancellationToken)
         {
             testCaller.Call(nameof(ClientSpecificConventionalMiddleware));
@@ -145,10 +171,10 @@ public class RabbitConsumerShould : IClassFixture<RabbitFixture>
     }
     private class ClientSpecificWrongInterfacedMiddleware : IConsumerMiddleware<string>
     {
-        private readonly RabbitProducerShould.ITestCaller testCaller;
+        private readonly RabbitProducerBuilderShould.ITestCaller testCaller;
 
         public ClientSpecificWrongInterfacedMiddleware(
-            RabbitProducerShould.ITestCaller testCaller)
+            RabbitProducerBuilderShould.ITestCaller testCaller)
         {
             this.testCaller = testCaller;
         }
@@ -174,7 +200,7 @@ public class RabbitConsumerShould : IClassFixture<RabbitFixture>
 
         public Task<ProcessResult> InvokeAsync<TNativeProperties, TMessage>(
             ConsumerContext<TNativeProperties, TMessage> context,
-            RabbitProducerShould.ITestCaller testCaller,
+            RabbitProducerBuilderShould.ITestCaller testCaller,
             CancellationToken cancellationToken)
         {
             testCaller.Call(nameof(GenericClientSpecificConventionalMiddleware));
@@ -193,7 +219,7 @@ public class RabbitConsumerShould : IClassFixture<RabbitFixture>
 
         public Task<ProcessResult> InvokeAsync(
             ConsumerContext<TNativeProperties, TMessage> context,
-            RabbitProducerShould.ITestCaller testCaller,
+            RabbitProducerBuilderShould.ITestCaller testCaller,
             CancellationToken cancellationToken)
         {
             testCaller.Call($"{nameof(GenericClientSpecificConventionalMiddleware<TNativeProperties, TMessage>)} with {typeof(TNativeProperties).Name}, {typeof(TMessage).Name}");
@@ -202,10 +228,10 @@ public class RabbitConsumerShould : IClassFixture<RabbitFixture>
     }
     private class Processor : IProcessor<RabbitMessage>
     {
-        private readonly RabbitProducerShould.ITestCaller testCaller;
+        private readonly RabbitProducerBuilderShould.ITestCaller testCaller;
 
         public Processor(
-            RabbitProducerShould.ITestCaller testCaller)
+            RabbitProducerBuilderShould.ITestCaller testCaller)
         {
             this.testCaller = testCaller;
         }
@@ -215,6 +241,68 @@ public class RabbitConsumerShould : IClassFixture<RabbitFixture>
             testCaller.Call(message.Text);
             return Task.FromResult(ProcessResult.Success);
         }
+    }
+    private class InvalidConventionMiddleware_NoInvokeMethod
+    {
+        private readonly ConsumerDelegate next;
+
+        public InvalidConventionMiddleware_NoInvokeMethod(ConsumerDelegate next)
+        {
+            this.next = next;
+        }
+
+        public Task NotInvoke(ConsumerContext context, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private class InvalidConventionMiddleware_AmbiguousInvokeMethods
+    {
+        private readonly ConsumerDelegate next;
+
+        public InvalidConventionMiddleware_AmbiguousInvokeMethods(ConsumerDelegate next)
+        {
+            this.next = next;
+        }
+
+        public Task InvokeAsync(ConsumerContext context, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task InvokeAsync(ConsumerContext context, RabbitProducerBuilderShould.ITestCaller testCaller, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+    }
+
+    private class InvalidConventionMiddleware_MismatchParameters_Context
+    {
+        private readonly ConsumerDelegate next;
+
+        public InvalidConventionMiddleware_MismatchParameters_Context(ConsumerDelegate next)
+        {
+            this.next = next;
+        }
+
+        public Task InvokeAsync(string context, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private class InvalidConventionMiddleware_MismatchParameters_CancellationToken
+    {
+        private readonly ConsumerDelegate next;
+
+        public InvalidConventionMiddleware_MismatchParameters_CancellationToken(ConsumerDelegate next)
+        {
+            this.next = next;
+        }
+
+        public Task InvokeAsync(ConsumerContext context, string cancellationToken) => Task.CompletedTask;
+    }
+
+    private class InvalidConventionMiddleware_MismatchParameters_Number
+    {
+        private readonly ConsumerDelegate next;
+
+        public InvalidConventionMiddleware_MismatchParameters_Number(ConsumerDelegate next)
+        {
+            this.next = next;
+        }
+
+        public Task InvokeAsync() => Task.CompletedTask;
     }
 
     private record RabbitMessage(string Text);

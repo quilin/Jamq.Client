@@ -26,18 +26,15 @@ public abstract class ProducerContext
 
 public class ProducerContext<TNativeProperties> : ProducerContext
 {
-    internal ProducerContext(string routingKey, object message, IServiceProvider serviceProvider) : base(routingKey, message, serviceProvider)
+    internal ProducerContext(
+        string routingKey,
+        object message,
+        IServiceProvider serviceProvider,
+        TNativeProperties nativeProperties)
+        : base(routingKey, message, serviceProvider)
     {
+        NativeProperties = nativeProperties;
     }
 
-    internal static ProducerContext<TNativeProperties> From(ProducerContext context) => context switch
-    {
-        ProducerContext<TNativeProperties> genericContext => genericContext,
-        _ => new ProducerContext<TNativeProperties>(context.RoutingKey, context.Message, context.ServiceProvider)
-        {
-            StoredValues = context.StoredValues
-        }
-    };
-
-    public TNativeProperties? NativeProperties { get; set; }
+    public TNativeProperties NativeProperties { get; }
 }

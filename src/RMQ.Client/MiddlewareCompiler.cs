@@ -7,6 +7,15 @@ namespace RMQ.Client;
 
 internal static class MiddlewareCompiler
 {
+    public static object CreateInstance<TDelegate>(
+        Type type, object[] args, IServiceProvider serviceProvider, TDelegate delegateArgument)
+    {
+        var constructorArgs = new object[args.Length + 1];
+        constructorArgs[0] = delegateArgument!;
+        Array.Copy(args, 0, constructorArgs, 1, args.Length);
+        return ActivatorUtilities.CreateInstance(serviceProvider, type, constructorArgs);
+    }
+    
     /// <summary>
     /// Replace
     /// <remarks>
