@@ -12,11 +12,12 @@ namespace RMQ.Client.Producing;
 internal class ProducerBuilder : IProducerBuilder
 {
     private readonly IList<object> middlewares = new List<object>();
+    private readonly IServiceProvider serviceProvider;
 
     public ProducerBuilder(
         IServiceProvider serviceProvider)
     {
-        ServiceProvider = serviceProvider;
+        this.serviceProvider = serviceProvider;
     }
 
     public IProducerBuilder With(Func<ProducerDelegate, ProducerDelegate> middleware)
@@ -47,16 +48,15 @@ internal class ProducerBuilder : IProducerBuilder
     public IProducer BuildRabbit(RabbitProducerParameters parameters)
     {
         var components = middlewares.Select(ToPipelineStep<IBasicProperties>);
-        var channelPool = ServiceProvider.GetRequiredService<IProducerChannelPool>();
-        return new Producer(channelPool, ServiceProvider, parameters, components);
+        var channelPool = serviceProvider.GetRequiredService<IProducerChannelPool>();
+        return new Producer(channelPool, serviceProvider, parameters, components);
     }
 
     private Func<ProducerDelegate<TNativeProperties>, ProducerDelegate<TNativeProperties>>
         ToPipelineStep<TNativeProperties>(object description) => description switch
     {
         // Lambda client-specific middleware
-        Func<ProducerDelegate<TNativeProperties>, ProducerDelegate<TNativeProperties>> clientSpecificMiddleware =>
-            clientSpecificMiddleware,
+        Func<ProducerDelegate<TNativeProperties>, ProducerDelegate<TNativeProperties>> middleware => middleware,
 
         // Client-specific middleware
         (Type type, object[]) when typeof(IProducerMiddleware<TNativeProperties>).GetTypeInfo()
@@ -70,7 +70,7 @@ internal class ProducerBuilder : IProducerBuilder
         Func<ProducerDelegate, ProducerDelegate> clientAgnosticMiddleware => next => context =>
         {
             var clientAgnosticDelegate = (ProducerDelegate)(clientAgnosticContext =>
-                next(ProducerContext<TNativeProperties>.From(clientAgnosticContext)));
+                next.Invoke(ProducerContext<TNativeProperties>.From(clientAgnosticContext)));
             var resultingDelegate = clientAgnosticMiddleware(clientAgnosticDelegate);
             return resultingDelegate.Invoke(context);
         },
@@ -81,7 +81,7 @@ internal class ProducerBuilder : IProducerBuilder
         {
             var middleware = (IProducerMiddleware)context.ServiceProvider.GetRequiredService(type);
             var clientAgnosticDelegate = (ProducerDelegate)(clientAgnosticContext =>
-                next(ProducerContext<TNativeProperties>.From(clientAgnosticContext)));
+                next.Invoke(ProducerContext<TNativeProperties>.From(clientAgnosticContext)));
             return middleware.InvokeAsync(context, clientAgnosticDelegate);
         },
 
@@ -110,12 +110,11 @@ internal class ProducerBuilder : IProducerBuilder
             // e.g. class TMw { ctor(ProducerDelegate){} InvokeAsync(ProducerContext ...) }
             if (contextParameterType == typeof(ProducerContext))
             {
-                var instance = GetMiddlewareInstance<ProducerDelegate>(type, args, ServiceProvider,
+                var instance = GetMiddlewareInstance<ProducerDelegate>(type, args, serviceProvider,
                     context => next(ProducerContext<TNativeProperties>.From(context)));
                 if (parameters.Length == 1)
                 {
-                    var clientAgnosticDelegate = methodInfo.CreateDelegate<ProducerDelegate>(instance);
-                    return context => clientAgnosticDelegate.Invoke(context);
+                    return methodInfo.CreateDelegate<ProducerDelegate>(instance).Invoke;
                 }
 
                 var factory = Compile<ProducerContext<TNativeProperties>>(methodInfo, parameters);
@@ -126,7 +125,7 @@ internal class ProducerBuilder : IProducerBuilder
             // e.g. class TMw { ctor(ProducerDelegate<Props>){} InvokeAsync(ProducerContext<Props> ...) }
             if (contextParameterType == typeof(ProducerContext<TNativeProperties>))
             {
-                var instance = GetMiddlewareInstance(type, args, ServiceProvider, next);
+                var instance = GetMiddlewareInstance(type, args, serviceProvider, next);
                 if (parameters.Length == 1)
                 {
                     return methodInfo.CreateDelegate<ProducerDelegate<TNativeProperties>>(instance);
@@ -140,15 +139,13 @@ internal class ProducerBuilder : IProducerBuilder
             // e.g. class TMw { ctor(ProducerDelegate){} InvokeAsync<TProps>(ProducerContext<TProps> ... ) }
             if (contextParameterType.GetGenericTypeDefinition() == typeof(ProducerContext<>) &&
                 methodInfo.IsGenericMethod &&
-                methodInfo.GetGenericArguments().Single() == contextParameterType.GetGenericArguments().Single())
+                methodInfo.GetGenericArguments().SequenceEqual(contextParameterType.GetGenericArguments()))
             {
-                var instance = GetMiddlewareInstance<ProducerDelegate>(type, args, ServiceProvider,
+                var instance = GetMiddlewareInstance<ProducerDelegate>(type, args, serviceProvider,
                     context => next(ProducerContext<TNativeProperties>.From(context)));
                 if (parameters.Length == 1)
                 {
-                    var clientAgnosticDelegate =
-                        methodInfo.CreateDelegate<ProducerDelegate<TNativeProperties>>(instance);
-                    return context => clientAgnosticDelegate.Invoke(context);
+                    return methodInfo.CreateDelegate<ProducerDelegate<TNativeProperties>>(instance).Invoke;
                 }
 
                 var factory = Compile<ProducerContext<TNativeProperties>>(methodInfo, parameters);
@@ -159,13 +156,13 @@ internal class ProducerBuilder : IProducerBuilder
             // e.g. class TMw<TProps> { ctor(ProducerDelegate<TProps>){} { InvokeAsync(ProducerContext<TProps> ... ) }
             if (contextParameterType.GetGenericTypeDefinition() == typeof(ProducerContext<>) &&
                 type.IsGenericType &&
-                type.GetGenericArguments().First() == contextParameterType.GetGenericArguments().Single())
+                type.GetGenericArguments().SequenceEqual(contextParameterType.GetGenericArguments()))
             {
                 var genericType = type.GetGenericTypeDefinition().MakeGenericType(typeof(TNativeProperties));
-                var instance = GetMiddlewareInstance(genericType, args, ServiceProvider, next);
+                var instance = GetMiddlewareInstance(genericType, args, serviceProvider, next);
                 if (parameters.Length == 1)
                 {
-                    return methodInfo.CreateDelegate<ProducerDelegate<TNativeProperties>>(instance);
+                    return methodInfo.CreateDelegate<ProducerDelegate<TNativeProperties>>(instance).Invoke;
                 }
 
                 var factory = Compile<ProducerContext<TNativeProperties>>(methodInfo, parameters);
@@ -219,7 +216,7 @@ internal class ProducerBuilder : IProducerBuilder
             var parameterType = parameters[i].ParameterType;
             if (parameterType.IsByRef)
             {
-                throw new NotSupportedException();
+                throw ProducerBuilderMiddlewareConventionException.NotSupported();
             }
 
             var parameterTypeExpression = new Expression[]
@@ -244,11 +241,11 @@ internal class ProducerBuilder : IProducerBuilder
         var body = methodInfo switch
         {
             // InvokeAsync<TProps>
-            { IsGenericMethod: true } =>
-                Expression.Call(middlewareInstanceArg, methodInfo.Name, new[] { nativePropertiesType },
+            {IsGenericMethod: true} =>
+                Expression.Call(middlewareInstanceArg, methodInfo.Name, new[] {nativePropertiesType},
                     methodArguments),
             // class TMw<TProps> { InvokeAsync }
-            { ContainsGenericParameters: true } =>
+            {ContainsGenericParameters: true} =>
                 Expression.Call(middlewareInstanceArg, methodInfo.Name, Type.EmptyTypes, methodArguments),
             _ =>
                 Expression.Call(middlewareInstanceArg, methodInfo, methodArguments)
@@ -264,6 +261,4 @@ internal class ProducerBuilder : IProducerBuilder
 
     private static readonly MethodInfo GetServiceInfo = typeof(ProducerBuilder)
         .GetMethod(nameof(GetService), BindingFlags.NonPublic | BindingFlags.Static)!;
-
-    public IServiceProvider ServiceProvider { get; }
 }

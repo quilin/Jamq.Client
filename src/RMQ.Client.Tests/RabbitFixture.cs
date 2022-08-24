@@ -7,12 +7,12 @@ using RMQ.Client.DependencyInjection;
 
 namespace RMQ.Client.Tests;
 
-public class RabbitProducerFixture : IDisposable
+public class RabbitFixture : IDisposable
 {
     public IServiceCollection ServiceCollection { get; }
     private readonly DefaultServiceProviderFactory providerFactory;
 
-    public RabbitProducerFixture()
+    public RabbitFixture()
     {
         providerFactory = new DefaultServiceProviderFactory();
         ServiceCollection = providerFactory.CreateBuilder(new ServiceCollection());

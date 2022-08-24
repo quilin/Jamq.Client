@@ -40,9 +40,4 @@ public interface IProducerBuilder
     /// <param name="parameters">RabbitMQ producer parameters</param>
     /// <returns></returns>
     IProducer BuildRabbit(RabbitProducerParameters parameters);
-
-    /// <summary>
-    /// Service provider
-    /// </summary>
-    IServiceProvider ServiceProvider { get; }
 }

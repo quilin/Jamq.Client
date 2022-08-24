@@ -16,7 +16,7 @@ internal class Consumer<TMessage, TProcessor> : IConsumer
     private readonly ILogger? logger;
     private readonly IChannelPool channelPool;
     private readonly IServiceProvider serviceProvider;
-    private readonly ConsumerDelegate<TMessage> pipeline;
+    private readonly ConsumerDelegate<BasicDeliverEventArgs, TMessage> pipeline;
 
     private readonly object sync = new();
 
@@ -32,7 +32,7 @@ internal class Consumer<TMessage, TProcessor> : IConsumer
         IServiceProvider serviceProvider,
         RabbitConsumerParameters parameters,
         ILogger? logger,
-        IEnumerable<Func<ConsumerDelegate<TMessage>, ConsumerDelegate<TMessage>>> middlewares)
+        IEnumerable<Func<ConsumerDelegate<BasicDeliverEventArgs, TMessage>, ConsumerDelegate<BasicDeliverEventArgs, TMessage>>> middlewares)
     {
         this.channelPool = channelPool;
         this.serviceProvider = serviceProvider;
@@ -40,7 +40,7 @@ internal class Consumer<TMessage, TProcessor> : IConsumer
         this.logger = logger;
 
         pipeline = middlewares.Reverse().Aggregate(
-            (ConsumerDelegate<TMessage>)((context, cancellationToken) =>
+            (ConsumerDelegate<BasicDeliverEventArgs, TMessage>)((context, cancellationToken) =>
             {
                 var processor = context.ServiceProvider.GetRequiredService<TProcessor>();
                 return processor.Process(context.Message!, cancellationToken);
@@ -78,7 +78,7 @@ internal class Consumer<TMessage, TProcessor> : IConsumer
         var consumer = new AsyncEventingBasicConsumer(channel);
         var currentCancellationTokenSource = cancellationTokenSource!;
 
-        async Task IncomingMessageHandler(object sender, BasicDeliverEventArgs e)
+        async Task IncomingMessageHandler(object sender, BasicDeliverEventArgs nativeProperties)
         {
             try
             {
@@ -91,7 +91,7 @@ internal class Consumer<TMessage, TProcessor> : IConsumer
                 if (!countdownEvent!.SafeIncrement())
                 {
                     logger?.LogWarning("Consumer was not able to increment countdown, returning message to the queue");
-                    channelAccessor().BasicNack(e.DeliveryTag, false, true);
+                    channelAccessor().BasicNack(nativeProperties.DeliveryTag, false, true);
                     return;
                 }
 
@@ -100,20 +100,21 @@ internal class Consumer<TMessage, TProcessor> : IConsumer
                     ProcessResult processResult;
                     await using (var scope = serviceProvider.CreateAsyncScope())
                     {
-                        var context = new ConsumerContext<TMessage>(e, scope.ServiceProvider);
+                        var context = new ConsumerContext<BasicDeliverEventArgs, TMessage>(
+                            scope.ServiceProvider, nativeProperties);
                         processResult = await pipeline.Invoke(context, currentCancellationTokenSource.Token);
                     }
 
                     switch (processResult)
                     {
                         case ProcessResult.Success:
-                            channelAccessor().BasicAck(e.DeliveryTag, false);
+                            channelAccessor().BasicAck(nativeProperties.DeliveryTag, false);
                             break;
                         case ProcessResult.RetryNeeded:
-                            channelAccessor().BasicNack(e.DeliveryTag, false, true);
+                            channelAccessor().BasicNack(nativeProperties.DeliveryTag, false, true);
                             break;
                         case ProcessResult.Failure:
-                            channelAccessor().BasicNack(e.DeliveryTag, false, false);
+                            channelAccessor().BasicNack(nativeProperties.DeliveryTag, false, false);
                             break;
                         default:
                             throw new ArgumentOutOfRangeException();
@@ -122,7 +123,7 @@ internal class Consumer<TMessage, TProcessor> : IConsumer
                 catch (Exception exception)
                 {
                     logger?.LogError(exception, "Consumer message handler has thrown unhandled exception");
-                    channelAccessor().BasicNack(e.DeliveryTag, false, false);
+                    channelAccessor().BasicNack(nativeProperties.DeliveryTag, false, false);
                 }
                 finally
                 {
