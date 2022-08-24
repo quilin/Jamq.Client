@@ -2,6 +2,8 @@
 
 /// <summary>
 /// Incoming message pipeline context
+/// Client and message agnostic
+/// <remarks>Can be useful for cases like metrics and logging where the content of the message and details of the consumer client are irrelevant</remarks>
 /// </summary>
 public abstract class ConsumerContext
 {
@@ -22,10 +24,14 @@ public abstract class ConsumerContext
     }
 }
 
-public class ConsumerContext<TNativeProperties, TMessage> : ConsumerContext
+/// <summary>
+/// Incoming message pipeline context
+/// Message agnostic
+/// <remarks>Can be used for cases like CorrelationToken passing, where the content of the message is irrelevant</remarks>
+/// </summary>
+public abstract class ConsumerContext<TNativeProperties> : ConsumerContext
 {
-    internal ConsumerContext(IServiceProvider serviceProvider, TNativeProperties nativeProperties)
-        : base(serviceProvider)
+    protected ConsumerContext(IServiceProvider serviceProvider, TNativeProperties nativeProperties) : base(serviceProvider)
     {
         NativeProperties = nativeProperties;
     }
@@ -34,6 +40,16 @@ public class ConsumerContext<TNativeProperties, TMessage> : ConsumerContext
     /// Native RabbitMQ library incoming message event
     /// </summary>
     public TNativeProperties NativeProperties { get; }
+}
+
+/// <summary>
+/// Incoming message pipeline context
+/// </summary>
+public sealed class ConsumerContext<TNativeProperties, TMessage> : ConsumerContext<TNativeProperties>
+{
+    internal ConsumerContext(IServiceProvider serviceProvider, TNativeProperties nativeProperties) : base(serviceProvider, nativeProperties)
+    {
+    }
 
     /// <summary>
     /// Decoded incoming message

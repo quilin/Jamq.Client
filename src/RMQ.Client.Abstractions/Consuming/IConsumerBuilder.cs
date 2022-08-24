@@ -9,16 +9,25 @@ public interface IConsumerBuilder
     /// Add client-agnostic middleware to the pipeline
     /// </summary>
     /// <param name="middleware">Middleware</param>
-    /// <returns>Builder itself for changing</returns>
+    /// <returns>Builder itself for chaining</returns>
     IConsumerBuilder With(Func<ConsumerDelegate, ConsumerDelegate> middleware);
 
     /// <summary>
     /// Add client-specific middleware to the pipeline
     /// </summary>
-    /// <param name="middleware"></param>
-    /// <typeparam name="TNativeProperties"></typeparam>
-    /// <typeparam name="TMessage"></typeparam>
-    /// <returns></returns>
+    /// <param name="middleware">Middleware</param>
+    /// <typeparam name="TNativeProperties">Client specific incoming message wrapper type</typeparam>
+    /// <returns>Builder itself for chaining</returns>
+    IConsumerBuilder With<TNativeProperties>(
+        Func<ConsumerDelegate<TNativeProperties>, ConsumerDelegate<TNativeProperties>> middleware);
+
+    /// <summary>
+    /// Add client-and-message-specific middleware to the pipeline
+    /// </summary>
+    /// <param name="middleware">Middleware</param>
+    /// <typeparam name="TNativeProperties">Client specific incoming message wrapper type</typeparam>
+    /// <typeparam name="TMessage">Incoming message type</typeparam>
+    /// <returns>Builder itself for chaining</returns>
     IConsumerBuilder With<TNativeProperties, TMessage>(
         Func<ConsumerDelegate<TNativeProperties, TMessage>, ConsumerDelegate<TNativeProperties, TMessage>> middleware);
 
@@ -27,7 +36,7 @@ public interface IConsumerBuilder
     /// </summary>
     /// <param name="middlewareType"></param>
     /// <param name="args"></param>
-    /// <returns></returns>
+    /// <returns>Builder itself for chaining</returns>
     IConsumerBuilder WithMiddleware(Type middlewareType, params object[] args);
 
     /// <summary>
@@ -42,7 +51,7 @@ public interface IConsumerBuilder
     /// <param name="parameters">RabbitMQ consumer parameters</param>
     /// <typeparam name="TProcessor">Message processor type</typeparam>
     /// <typeparam name="TMessage">Message type</typeparam>
-    /// <returns></returns>
+    /// <returns>Consumer</returns>
     IConsumer BuildRabbit<TProcessor, TMessage>(RabbitConsumerParameters parameters)
         where TProcessor : IProcessor<TMessage>;
 }
