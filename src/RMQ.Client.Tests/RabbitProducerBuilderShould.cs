@@ -284,9 +284,4 @@ public class RabbitProducerBuilderShould : IClassFixture<RabbitFixture>
 
         public Task InvokeAsync() => Task.CompletedTask;
     }
-
-    public interface ITestCaller
-    {
-        void Call(string message);
     }
-}

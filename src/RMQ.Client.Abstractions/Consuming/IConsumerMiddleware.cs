@@ -21,7 +21,15 @@ public interface IConsumerMiddleware<TNativeProperties>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <typeparam name="TMessage">Message type</typeparam>
     /// <returns>A <see cref="Task"/> that represents the execution of this middleware</returns>
-    Task<ProcessResult> InvokeAsync<TMessage>(
+    Task<ProcessResult> InvokeAsync(
+        ConsumerContext<TNativeProperties> context,
+        ConsumerDelegate<TNativeProperties> next,
+        CancellationToken cancellationToken);
+}
+
+public interface IConsumerMiddleware<TNativeProperties, TMessage>
+{
+    Task<ProcessResult> InvokeAsync(
         ConsumerContext<TNativeProperties, TMessage> context,
         ConsumerDelegate<TNativeProperties, TMessage> next,
         CancellationToken cancellationToken);
