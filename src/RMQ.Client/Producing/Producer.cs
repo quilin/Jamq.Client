@@ -64,14 +64,12 @@ internal class Producer : IProducer
         await using var scope = serviceProvider.CreateAsyncScope();
 
         var basicProperties = channelAccessor.Value.Channel.CreateBasicProperties();
-        var context = new ProducerContext<IBasicProperties>(routingKey, message, scope.ServiceProvider)
-        {
-            NativeProperties = basicProperties
-        };
-        await pipeline.Invoke(context);
+        var context = new ProducerContext<IBasicProperties>(
+            routingKey, message, scope.ServiceProvider, basicProperties);
+        await pipeline.Invoke(context, cancellationToken);
     }
 
-    private Task SendMessage(ProducerContext<IBasicProperties> context)
+    private Task SendMessage(ProducerContext<IBasicProperties> context, CancellationToken cancellationToken)
     {
         var channelAdapter = channelAccessor.Value;
         var channel = channelAdapter.Channel;

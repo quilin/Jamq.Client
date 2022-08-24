@@ -105,6 +105,7 @@ internal class ConsumerBuilder : IConsumerBuilder
 
             var parameters = methodInfo.GetParameters();
             if (parameters.Length < 2 ||
+                !parameters.First().ParameterType.IsAssignableTo(typeof(ConsumerContext)) ||
                 parameters.Last().ParameterType != typeof(CancellationToken))
             {
                 throw ConsumerBuilderMiddlewareConventionException.MismatchParameters(type);

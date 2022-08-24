@@ -11,11 +11,12 @@ public class DefaultBodyEncodingMiddleware : IProducerMiddleware, IConsumerMiddl
 
     public Task InvokeAsync(
         ProducerContext context,
-        ProducerDelegate next)
+        ProducerDelegate next,
+        CancellationToken cancellationToken)
     {
         var body = JsonSerializer.SerializeToUtf8Bytes(context.Message, SerializerOptions);
         context.Body = body;
-        return next.Invoke(context);
+        return next.Invoke(context, cancellationToken);
     }
 
     public Task<ProcessResult> InvokeAsync<TMessage>(

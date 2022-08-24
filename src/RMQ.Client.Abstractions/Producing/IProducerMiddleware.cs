@@ -10,8 +10,9 @@ public interface IProducerMiddleware
     /// </summary>
     /// <param name="context">The <see cref="ProducerContext"/> for current produce</param>
     /// <param name="next">The delegate representing the remaining middleware in the produce pipeline</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>A <see cref="Task"/> that represents the execution of this middleware</returns>
-    Task InvokeAsync(ProducerContext context, ProducerDelegate next);
+    Task InvokeAsync(ProducerContext context, ProducerDelegate next, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -25,6 +26,10 @@ public interface IProducerMiddleware<TNativeProperties>
     /// </summary>
     /// <param name="context">The <see cref="ProducerContext"/> for current produce</param>
     /// <param name="next">The delegate representing the remaining middleware in the produce pipeline</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>A <see cref="Task"/> that represents the execution of this middleware</returns>
-    Task InvokeAsync(ProducerContext<TNativeProperties> context, ProducerDelegate<TNativeProperties> next);
+    Task InvokeAsync(
+        ProducerContext<TNativeProperties> context,
+        ProducerDelegate<TNativeProperties> next,
+        CancellationToken cancellationToken);
 }

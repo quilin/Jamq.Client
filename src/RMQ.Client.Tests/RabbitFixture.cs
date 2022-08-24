@@ -17,7 +17,10 @@ public class RabbitFixture : IDisposable
         providerFactory = new DefaultServiceProviderFactory();
         ServiceCollection = providerFactory.CreateBuilder(new ServiceCollection());
         ServiceCollection.AddRmqClient(new RabbitConnectionParameters());
+    }
 
+    public void CreateTopology()
+    {
         var connectionFactory = GetServiceProvider().GetRequiredService<IConnectionFactory>();
         using var connection = connectionFactory.CreateConnection();
         using var channel = connection.CreateModel();
@@ -25,6 +28,16 @@ public class RabbitFixture : IDisposable
         channel.ExchangeDeclare("test-exchange", "topic", true);
         channel.QueueDeclare("test-queue", true, false, false);
         channel.QueueBind("test-queue", "test-exchange", "#");
+    }
+
+    public void ClearTopology()
+    {
+        var connectionFactory = GetServiceProvider().GetRequiredService<IConnectionFactory>();
+        using var connection = connectionFactory.CreateConnection();
+        using var channel = connection.CreateModel();
+
+        channel.QueueDelete("test-queue");
+        channel.ExchangeDelete("test-exchange");
     }
 
     public IProducerBuilder GetProducerBuilder() => providerFactory.CreateServiceProvider(ServiceCollection)
@@ -37,11 +50,5 @@ public class RabbitFixture : IDisposable
 
     public void Dispose()
     {
-        var connectionFactory = GetServiceProvider().GetRequiredService<IConnectionFactory>();
-        using var connection = connectionFactory.CreateConnection();
-        using var channel = connection.CreateModel();
-
-        channel.QueueDelete("test-queue");
-        channel.ExchangeDelete("test-exchange");
     }
 }

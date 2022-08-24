@@ -14,8 +14,8 @@ public class ProducerBuilderMiddlewareConventionException : InvalidOperationExce
     internal static ProducerBuilderMiddlewareConventionException AmbiguousInvokeAsyncMethods(Type type) =>
         new($"Middleware {type.FullName} has multiple {nameof(IProducerMiddleware.InvokeAsync)} methods");
 
-    internal static ProducerBuilderMiddlewareConventionException ContextParameterMismatch(Type type) =>
-        new($"Middleware {type.FullName} method {nameof(IProducerMiddleware.InvokeAsync)} has to have first parameter of type {nameof(ProducerContext)}");
+    internal static ProducerBuilderMiddlewareConventionException MismatchParameters(Type type) =>
+        new($"Middleware {type.FullName} method {nameof(IProducerMiddleware.InvokeAsync)} has to have first parameter of type {nameof(ProducerContext)} and last of type {nameof(CancellationToken)}");
 
     internal static ProducerBuilderMiddlewareConventionException NotSupported() =>
         new("Not supported");
