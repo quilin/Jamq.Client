@@ -28,11 +28,18 @@ public static class ServiceCollectionExtensions
         this IServiceCollection services,
         RabbitConnectionParameters parameters,
         Func<IProducerBuilder, IProducerBuilder>? producerBuilderDefaults = null,
+        Func<IConsumerBuilder, IConsumerBuilder>? consumerBuilderDefaults = null) =>
+        AddRmqClient(services, _ => parameters, producerBuilderDefaults, consumerBuilderDefaults);
+
+    public static IServiceCollection AddRmqClient(
+        this IServiceCollection services,
+        Func<IServiceProvider, RabbitConnectionParameters> parametersProvider,
+        Func<IProducerBuilder, IProducerBuilder>? producerBuilderDefaults = null,
         Func<IConsumerBuilder, IConsumerBuilder>? consumerBuilderDefaults = null)
     {
         services
-            .AddSingleton(parameters)
-            .AddSingleton(CreateConnectionFactory(parameters))
+            .AddSingleton(parametersProvider)
+            .AddSingleton(sp => CreateConnectionFactory(parametersProvider.Invoke(sp)))
             .AddSingleton<IProducerChannelPool, ChannelPool>()
             .AddSingleton<IConsumerChannelPool, ChannelPool>()
             .AddScoped<DefaultBodyEncodingMiddleware>()
