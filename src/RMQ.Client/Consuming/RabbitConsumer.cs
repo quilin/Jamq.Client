@@ -9,14 +9,14 @@ using RMQ.Client.Connection.Adapters;
 
 namespace RMQ.Client.Consuming;
 
-internal class Consumer<TMessage, TProcessor> : IConsumer
-    where TProcessor : IProcessor<TMessage>
+internal class RabbitConsumer<TMessage, TProcessor> : IConsumer
+    where TProcessor : IProcessor<string, TMessage>
 {
     private readonly RabbitConsumerParameters parameters;
     private readonly ILogger? logger;
     private readonly IChannelPool channelPool;
     private readonly IServiceProvider serviceProvider;
-    private readonly ConsumerDelegate<TMessage, BasicDeliverEventArgs> pipeline;
+    private readonly ConsumerDelegate<string, TMessage, BasicDeliverEventArgs> pipeline;
 
     private readonly object sync = new();
 
@@ -27,12 +27,12 @@ internal class Consumer<TMessage, TProcessor> : IConsumer
     private Lazy<ConsumerConnectionState>? connectionAccessor;
     private readonly Func<IModel> channelAccessor;
 
-    public Consumer(
+    public RabbitConsumer(
         IChannelPool channelPool,
         IServiceProvider serviceProvider,
         RabbitConsumerParameters parameters,
         ILogger? logger,
-        IEnumerable<Func<ConsumerDelegate<TMessage, BasicDeliverEventArgs>, ConsumerDelegate<TMessage, BasicDeliverEventArgs>>> middlewares)
+        IEnumerable<Func<ConsumerDelegate<string, TMessage, BasicDeliverEventArgs>, ConsumerDelegate<string, TMessage, BasicDeliverEventArgs>>> middlewares)
     {
         this.channelPool = channelPool;
         this.serviceProvider = serviceProvider;
@@ -40,10 +40,13 @@ internal class Consumer<TMessage, TProcessor> : IConsumer
         this.logger = logger;
 
         pipeline = middlewares.Reverse().Aggregate(
-            (ConsumerDelegate<TMessage, BasicDeliverEventArgs>)((context, cancellationToken) =>
+            (ConsumerDelegate<string, TMessage, BasicDeliverEventArgs>)((context, cancellationToken) =>
             {
                 var processor = context.ServiceProvider.GetRequiredService<TProcessor>();
-                return processor.Process(context.Message!, cancellationToken);
+                return processor.Process(
+                    context.Key ?? context.NativeProperties.RoutingKey,
+                    context.Message!,
+                    cancellationToken);
             }),
             (current, component) => component(current));
         channelAccessor = () => connectionAccessor!.Value.ChannelAdapter.Channel;
@@ -100,7 +103,7 @@ internal class Consumer<TMessage, TProcessor> : IConsumer
                     ProcessResult processResult;
                     await using (var scope = serviceProvider.CreateAsyncScope())
                     {
-                        var context = new ConsumerContext<TMessage, BasicDeliverEventArgs>(
+                        var context = new ConsumerContext<string, TMessage, BasicDeliverEventArgs>(
                             scope.ServiceProvider, nativeProperties);
                         processResult = await pipeline.Invoke(context, currentCancellationTokenSource.Token);
                     }

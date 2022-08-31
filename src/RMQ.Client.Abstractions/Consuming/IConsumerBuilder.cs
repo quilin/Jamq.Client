@@ -25,11 +25,12 @@ public interface IConsumerBuilder
     /// Add client-and-message-specific middleware to the pipeline
     /// </summary>
     /// <param name="middleware">Middleware</param>
-    /// <typeparam name="TNativeProperties">Client specific incoming message wrapper type</typeparam>
+    /// <typeparam name="TKey">Message key type</typeparam>
     /// <typeparam name="TMessage">Incoming message type</typeparam>
+    /// <typeparam name="TNativeProperties">Client specific incoming message wrapper type</typeparam>
     /// <returns>Builder itself for chaining</returns>
-    IConsumerBuilder With<TMessage, TNativeProperties>(
-        Func<ConsumerDelegate<TMessage, TNativeProperties>, ConsumerDelegate<TMessage, TNativeProperties>> middleware);
+    IConsumerBuilder With<TKey, TMessage, TNativeProperties>(
+        Func<ConsumerDelegate<TKey, TMessage, TNativeProperties>, ConsumerDelegate<TKey, TMessage, TNativeProperties>> middleware);
 
     /// <summary>
     /// Add middleware to the pipeline
@@ -49,9 +50,9 @@ public interface IConsumerBuilder
     /// Build consumer for RabbitMQ
     /// </summary>
     /// <param name="parameters">RabbitMQ consumer parameters</param>
-    /// <typeparam name="TProcessor">Message processor type</typeparam>
     /// <typeparam name="TMessage">Message type</typeparam>
+    /// <typeparam name="TProcessor">Message processor type</typeparam>
     /// <returns>Consumer</returns>
     IConsumer BuildRabbit<TMessage, TProcessor>(RabbitConsumerParameters parameters)
-        where TProcessor : IProcessor<TMessage>;
+        where TProcessor : IProcessor<string, TMessage>;
 }

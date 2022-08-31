@@ -48,12 +48,17 @@ public abstract class ConsumerContext<TNativeProperties> : ConsumerContext
 /// <summary>
 /// Incoming message pipeline context
 /// </summary>
-public sealed class ConsumerContext<TMessage, TNativeProperties> : ConsumerContext<TNativeProperties>
+public sealed class ConsumerContext<TKey, TMessage, TNativeProperties> : ConsumerContext<TNativeProperties>
 {
     internal ConsumerContext(IServiceProvider serviceProvider, TNativeProperties nativeProperties)
         : base(serviceProvider, nativeProperties)
     {
     }
+
+    /// <summary>
+    /// Incoming key
+    /// </summary>
+    public TKey? Key { get; set; }
 
     /// <summary>
     /// Decoded incoming message
