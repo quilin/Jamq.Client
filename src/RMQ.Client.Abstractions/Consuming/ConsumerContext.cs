@@ -7,6 +7,12 @@
 /// </summary>
 public abstract class ConsumerContext
 {
+    protected ConsumerContext(
+        IServiceProvider serviceProvider)
+    {
+        ServiceProvider = serviceProvider;
+    }
+
     /// <summary>
     /// Service provider
     /// </summary>
@@ -16,12 +22,6 @@ public abstract class ConsumerContext
     /// Values to share between the pipeline steps
     /// </summary>
     public IDictionary<string, object> StoredValues { get; internal init; } = new Dictionary<string, object>();
-
-    protected ConsumerContext(
-        IServiceProvider serviceProvider)
-    {
-        ServiceProvider = serviceProvider;
-    }
 }
 
 /// <summary>
@@ -31,7 +31,10 @@ public abstract class ConsumerContext
 /// </summary>
 public abstract class ConsumerContext<TNativeProperties> : ConsumerContext
 {
-    protected ConsumerContext(IServiceProvider serviceProvider, TNativeProperties nativeProperties) : base(serviceProvider)
+    protected ConsumerContext(
+        IServiceProvider serviceProvider,
+        TNativeProperties nativeProperties)
+        : base(serviceProvider)
     {
         NativeProperties = nativeProperties;
     }
@@ -45,9 +48,10 @@ public abstract class ConsumerContext<TNativeProperties> : ConsumerContext
 /// <summary>
 /// Incoming message pipeline context
 /// </summary>
-public sealed class ConsumerContext<TNativeProperties, TMessage> : ConsumerContext<TNativeProperties>
+public sealed class ConsumerContext<TMessage, TNativeProperties> : ConsumerContext<TNativeProperties>
 {
-    internal ConsumerContext(IServiceProvider serviceProvider, TNativeProperties nativeProperties) : base(serviceProvider, nativeProperties)
+    internal ConsumerContext(IServiceProvider serviceProvider, TNativeProperties nativeProperties)
+        : base(serviceProvider, nativeProperties)
     {
     }
 

@@ -4,11 +4,11 @@ using RMQ.Client.Abstractions.Consuming;
 
 namespace RMQ.Client.Defaults;
 
-public class DefaultBodyDecodingMiddleware<TMessage> : IConsumerMiddleware<BasicDeliverEventArgs, TMessage>
+public class DefaultBodyDecodingMiddleware<TMessage> : IConsumerMiddleware<TMessage, BasicDeliverEventArgs>
 {
     public Task<ProcessResult> InvokeAsync(
-        ConsumerContext<BasicDeliverEventArgs, TMessage> context,
-        ConsumerDelegate<BasicDeliverEventArgs, TMessage> next,
+        ConsumerContext<TMessage, BasicDeliverEventArgs> context,
+        ConsumerDelegate<TMessage, BasicDeliverEventArgs> next,
         CancellationToken cancellationToken)
     {
         var message = JsonSerializer.Deserialize<TMessage>(

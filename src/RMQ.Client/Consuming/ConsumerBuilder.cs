@@ -32,8 +32,8 @@ internal class ConsumerBuilder : IConsumerBuilder
         return this;
     }
 
-    public IConsumerBuilder With<TNativeProperties, TMessage>(
-        Func<ConsumerDelegate<TNativeProperties, TMessage>, ConsumerDelegate<TNativeProperties, TMessage>> middleware)
+    public IConsumerBuilder With<TMessage, TNativeProperties>(
+        Func<ConsumerDelegate<TMessage, TNativeProperties>, ConsumerDelegate<TMessage, TNativeProperties>> middleware)
     {
         middlewares.Add(middleware);
         return this;
@@ -51,10 +51,10 @@ internal class ConsumerBuilder : IConsumerBuilder
         return this;
     }
 
-    public IConsumer BuildRabbit<TProcessor, TMessage>(RabbitConsumerParameters parameters)
+    public IConsumer BuildRabbit<TMessage, TProcessor>(RabbitConsumerParameters parameters)
         where TProcessor : IProcessor<TMessage>
     {
-        var components = middlewares.Select(ToPipelineStep<BasicDeliverEventArgs, TMessage>);
+        var components = middlewares.Select(ToPipelineStep<TMessage, BasicDeliverEventArgs>);
 
         var channelPool = serviceProvider.GetRequiredService<IConsumerChannelPool>();
         var logger = serviceProvider.GetService<ILogger<Consumer<TMessage, TProcessor>>>();
@@ -62,11 +62,11 @@ internal class ConsumerBuilder : IConsumerBuilder
         return new Consumer<TMessage, TProcessor>(channelPool, serviceProvider, parameters, logger, components);
     }
 
-    private Func<ConsumerDelegate<TNativeProperties, TMessage>, ConsumerDelegate<TNativeProperties, TMessage>>
-        ToPipelineStep<TNativeProperties, TMessage>(object description) => description switch
+    private Func<ConsumerDelegate<TMessage, TNativeProperties>, ConsumerDelegate<TMessage, TNativeProperties>>
+        ToPipelineStep<TMessage, TNativeProperties>(object description) => description switch
     {
         // Lambda specific middleware
-        Func<ConsumerDelegate<TNativeProperties, TMessage>, ConsumerDelegate<TNativeProperties, TMessage>> middleware =>
+        Func<ConsumerDelegate<TMessage, TNativeProperties>, ConsumerDelegate<TMessage, TNativeProperties>> middleware =>
             middleware,
 
         // Lambda message-agnostic middleware
@@ -74,7 +74,7 @@ internal class ConsumerBuilder : IConsumerBuilder
             next => (context, ct) =>
             {
                 var messageAgnosticDelegate = (ConsumerDelegate<TNativeProperties>)((messageAgnosticContext, token) =>
-                    next.Invoke((ConsumerContext<TNativeProperties, TMessage>)messageAgnosticContext, token));
+                    next.Invoke((ConsumerContext<TMessage, TNativeProperties>)messageAgnosticContext, token));
                 var resultingDelegate = messageAgnosticMiddleware.Invoke(messageAgnosticDelegate);
                 return resultingDelegate.Invoke(context, ct);
             },
@@ -83,16 +83,16 @@ internal class ConsumerBuilder : IConsumerBuilder
         Func<ConsumerDelegate, ConsumerDelegate> clientAgnosticMiddleware => next => (context, ct) =>
         {
             var clientAgnosticDelegate = (ConsumerDelegate)((clientAgnosticContext, token) =>
-                next.Invoke((ConsumerContext<TNativeProperties, TMessage>)clientAgnosticContext, token));
+                next.Invoke((ConsumerContext<TMessage, TNativeProperties>)clientAgnosticContext, token));
             var resultingDelegate = clientAgnosticMiddleware.Invoke(clientAgnosticDelegate);
             return resultingDelegate.Invoke(context, ct);
         },
 
         // Interface specific middleware
-        (Type type, object[]) when typeof(IConsumerMiddleware<TNativeProperties, TMessage>).GetTypeInfo()
+        (Type type, object[]) when typeof(IConsumerMiddleware<TMessage, TNativeProperties>).GetTypeInfo()
             .IsAssignableFrom(type.GetTypeInfo()) => next => (context, ct) =>
         {
-            var middleware = (IConsumerMiddleware<TNativeProperties, TMessage>)context.ServiceProvider
+            var middleware = (IConsumerMiddleware<TMessage, TNativeProperties>)context.ServiceProvider
                 .GetRequiredService(type);
             return middleware.InvokeAsync(context, next, ct);
         },
@@ -103,11 +103,11 @@ internal class ConsumerBuilder : IConsumerBuilder
             when type.GetInterfaces().Any(i =>
                 i.GetGenericTypeDefinition() == typeof(IConsumerMiddleware<,>) &&
                 i.GetGenericArguments().SequenceEqual(
-                    new[] { typeof(TNativeProperties), type.GetGenericArguments().First() }))
+                    new[] { type.GetGenericArguments().First(), typeof(TNativeProperties) }))
             => next => (context, ct) =>
             {
                 var genericType = type.GetGenericTypeDefinition().MakeGenericType(typeof(TMessage));
-                var middleware = (IConsumerMiddleware<TNativeProperties, TMessage>)context.ServiceProvider
+                var middleware = (IConsumerMiddleware<TMessage, TNativeProperties>)context.ServiceProvider
                     .GetRequiredService(genericType);
                 return middleware.InvokeAsync(context, next, ct);
             },
@@ -121,8 +121,8 @@ internal class ConsumerBuilder : IConsumerBuilder
             => next => (context, ct) =>
             {
                 var genericType = type.GetGenericTypeDefinition().MakeGenericType(
-                    typeof(TNativeProperties), typeof(TMessage));
-                var middleware = (IConsumerMiddleware<TNativeProperties, TMessage>)context.ServiceProvider
+                    typeof(TMessage), typeof(TNativeProperties));
+                var middleware = (IConsumerMiddleware<TMessage, TNativeProperties>)context.ServiceProvider
                     .GetRequiredService(genericType);
                 return middleware.InvokeAsync(context, next, ct);
             },
@@ -133,7 +133,7 @@ internal class ConsumerBuilder : IConsumerBuilder
         {
             var middleware = (IConsumerMiddleware<TNativeProperties>)context.ServiceProvider.GetRequiredService(type);
             var messageAgnosticDelegate = (ConsumerDelegate<TNativeProperties>)((messageAgnosticContext, token) =>
-                next.Invoke((ConsumerContext<TNativeProperties, TMessage>)messageAgnosticContext, token));
+                next.Invoke((ConsumerContext<TMessage, TNativeProperties>)messageAgnosticContext, token));
             return middleware.InvokeAsync(context, messageAgnosticDelegate, ct);
         },
 
@@ -144,7 +144,7 @@ internal class ConsumerBuilder : IConsumerBuilder
             // Interface typed middleware
             var middleware = (IConsumerMiddleware)context.ServiceProvider.GetRequiredService(type);
             var clientAgnosticDelegate = (ConsumerDelegate)((clientAgnosticContext, token) =>
-                next.Invoke((ConsumerContext<TNativeProperties, TMessage>)clientAgnosticContext, token));
+                next.Invoke((ConsumerContext<TMessage, TNativeProperties>)clientAgnosticContext, token));
             return middleware.InvokeAsync(context, clientAgnosticDelegate, ct);
         },
 
@@ -179,15 +179,15 @@ internal class ConsumerBuilder : IConsumerBuilder
             // e.g. class TMw { ctor(ConsumerDelegate){} InvokeAsync(ConsumerContext ...) }
             if (contextParameterType == typeof(ConsumerContext))
             {
-                var instance = GetMiddlewareInstance<ConsumerDelegate>(type, args, serviceProvider,
-                    (context, ct) => next.Invoke((ConsumerContext<TNativeProperties, TMessage>)context, ct));
+                var instance = MiddlewareCompiler.CreateInstance<ConsumerDelegate>(type, args, serviceProvider,
+                    (context, ct) => next.Invoke((ConsumerContext<TMessage, TNativeProperties>)context, ct));
                 if (parameters.Length == 2)
                 {
                     return methodInfo.CreateDelegate<ConsumerDelegate>(instance).Invoke;
                 }
 
                 var factory =
-                    MiddlewareCompiler.Compile<ConsumerContext<TNativeProperties, TMessage>, Task<ProcessResult>>(
+                    MiddlewareCompiler.Compile<ConsumerContext<TMessage, TNativeProperties>, Task<ProcessResult>>(
                         methodInfo, parameters);
                 return (context, ct) => factory.Invoke(instance, context, context.ServiceProvider, ct);
             }
@@ -196,31 +196,31 @@ internal class ConsumerBuilder : IConsumerBuilder
             // e.g. class TMw { ctor(ConsumerDelegate<Props>){} InvokeAsync(ConsumerContext<Props> ...)
             if (contextParameterType == typeof(ConsumerContext<TNativeProperties>))
             {
-                var instance = GetMiddlewareInstance<ConsumerDelegate<TNativeProperties>>(type, args, serviceProvider,
-                    (context, ct) => next.Invoke((ConsumerContext<TNativeProperties, TMessage>)context, ct));
+                var instance = MiddlewareCompiler.CreateInstance<ConsumerDelegate<TNativeProperties>>(type, args, serviceProvider,
+                    (context, ct) => next.Invoke((ConsumerContext<TMessage, TNativeProperties>)context, ct));
                 if (parameters.Length == 2)
                 {
                     return methodInfo.CreateDelegate<ConsumerDelegate<TNativeProperties>>(instance).Invoke;
                 }
 
                 var factory =
-                    MiddlewareCompiler.Compile<ConsumerContext<TNativeProperties, TMessage>, Task<ProcessResult>>(
+                    MiddlewareCompiler.Compile<ConsumerContext<TMessage, TNativeProperties>, Task<ProcessResult>>(
                         methodInfo, parameters);
                 return (context, ct) => factory.Invoke(instance, context, context.ServiceProvider, ct);
             }
 
             // Default specific middleware
             // e.g. class TMw { ctor(ConsumerDelegate<Props, Message>){} InvokeAsync(ConsumerContext<Props, Message> ...) }
-            if (contextParameterType == typeof(ConsumerContext<TNativeProperties, TMessage>))
+            if (contextParameterType == typeof(ConsumerContext<TMessage, TNativeProperties>))
             {
-                var instance = GetMiddlewareInstance(type, args, serviceProvider, next);
+                var instance = MiddlewareCompiler.CreateInstance(type, args, serviceProvider, next);
                 if (parameters.Length == 2)
                 {
-                    return methodInfo.CreateDelegate<ConsumerDelegate<TNativeProperties, TMessage>>(instance).Invoke;
+                    return methodInfo.CreateDelegate<ConsumerDelegate<TMessage, TNativeProperties>>(instance).Invoke;
                 }
 
                 var factory =
-                    MiddlewareCompiler.Compile<ConsumerContext<TNativeProperties, TMessage>, Task<ProcessResult>>(
+                    MiddlewareCompiler.Compile<ConsumerContext<TMessage, TNativeProperties>, Task<ProcessResult>>(
                         methodInfo, parameters);
                 return (context, ct) => factory.Invoke(instance, context, context.ServiceProvider, ct);
             }
@@ -231,15 +231,15 @@ internal class ConsumerBuilder : IConsumerBuilder
                 methodInfo.IsGenericMethod &&
                 methodInfo.GetGenericArguments().SequenceEqual(contextParameterType.GetGenericArguments()))
             {
-                var instance = GetMiddlewareInstance<ConsumerDelegate>(type, args, serviceProvider,
-                    (context, ct) => next.Invoke((ConsumerContext<TNativeProperties, TMessage>)context, ct));
+                var instance = MiddlewareCompiler.CreateInstance<ConsumerDelegate>(type, args, serviceProvider,
+                    (context, ct) => next.Invoke((ConsumerContext<TMessage, TNativeProperties>)context, ct));
                 if (parameters.Length == 2)
                 {
-                    return methodInfo.CreateDelegate<ConsumerDelegate<TNativeProperties, TMessage>>(instance).Invoke;
+                    return methodInfo.CreateDelegate<ConsumerDelegate<TMessage, TNativeProperties>>(instance).Invoke;
                 }
 
                 var factory =
-                    MiddlewareCompiler.Compile<ConsumerContext<TNativeProperties, TMessage>, Task<ProcessResult>>(
+                    MiddlewareCompiler.Compile<ConsumerContext<TMessage, TNativeProperties>, Task<ProcessResult>>(
                         methodInfo, parameters);
                 return (context, ct) => factory.Invoke(instance, context, context.ServiceProvider, ct);
             }
@@ -251,15 +251,15 @@ internal class ConsumerBuilder : IConsumerBuilder
                 type.GetGenericArguments().SequenceEqual(contextParameterType.GetGenericArguments()))
             {
                 var genericType = type.GetGenericTypeDefinition()
-                    .MakeGenericType(typeof(TNativeProperties), typeof(TMessage));
-                var instance = GetMiddlewareInstance(genericType, args, serviceProvider, next);
+                    .MakeGenericType(typeof(TMessage), typeof(TNativeProperties));
+                var instance = MiddlewareCompiler.CreateInstance(genericType, args, serviceProvider, next);
                 if (parameters.Length == 2)
                 {
-                    return methodInfo.CreateDelegate<ConsumerDelegate<TNativeProperties, TMessage>>(instance).Invoke;
+                    return methodInfo.CreateDelegate<ConsumerDelegate<TMessage, TNativeProperties>>(instance).Invoke;
                 }
 
                 var factory =
-                    MiddlewareCompiler.Compile<ConsumerContext<TNativeProperties, TMessage>, Task<ProcessResult>>(
+                    MiddlewareCompiler.Compile<ConsumerContext<TMessage, TNativeProperties>, Task<ProcessResult>>(
                         methodInfo, parameters);
                 return (context, ct) => factory.Invoke(instance, context, context.ServiceProvider, ct);
             }
@@ -269,13 +269,4 @@ internal class ConsumerBuilder : IConsumerBuilder
         },
         _ => throw new NotSupportedException()
     };
-
-    private static object GetMiddlewareInstance<TConsumerDelegate>(
-        Type type, object[] args, IServiceProvider serviceProvider, TConsumerDelegate consumerDelegate)
-    {
-        var constructorArgs = new object[args.Length + 1];
-        constructorArgs[0] = consumerDelegate!;
-        Array.Copy(args, 0, constructorArgs, 1, args.Length);
-        return ActivatorUtilities.CreateInstance(serviceProvider, type, constructorArgs);
-    }
 }

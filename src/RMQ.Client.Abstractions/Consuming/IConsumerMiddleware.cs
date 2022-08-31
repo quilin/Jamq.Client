@@ -27,10 +27,10 @@ public interface IConsumerMiddleware<TNativeProperties>
         CancellationToken cancellationToken);
 }
 
-public interface IConsumerMiddleware<TNativeProperties, TMessage>
+public interface IConsumerMiddleware<TMessage, TNativeProperties>
 {
     Task<ProcessResult> InvokeAsync(
-        ConsumerContext<TNativeProperties, TMessage> context,
-        ConsumerDelegate<TNativeProperties, TMessage> next,
+        ConsumerContext<TMessage, TNativeProperties> context,
+        ConsumerDelegate<TMessage, TNativeProperties> next,
         CancellationToken cancellationToken);
 }

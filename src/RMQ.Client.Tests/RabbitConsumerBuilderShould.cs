@@ -42,7 +42,7 @@ public class RabbitConsumerBuilderShould : IClassFixture<RabbitFixture>
     {
         var producerBuilder = fixture.GetConsumerBuilder()
             .WithMiddleware(middleware);
-        producerBuilder.Invoking(b => b.BuildRabbit<Processor, RabbitMessage>(
+        producerBuilder.Invoking(b => b.BuildRabbit<RabbitMessage, Processor>(
                 new RabbitConsumerParameters("consumer", "test-exchange", ProcessingOrder.Sequential)))
             .Should().Throw<ConsumerBuilderMiddlewareConventionException>();
     }
@@ -65,7 +65,7 @@ public class RabbitConsumerBuilderShould : IClassFixture<RabbitFixture>
                 testCaller.Call("MessageAgnosticLambdaMiddleware");
                 return next.Invoke(context, token);
             })
-            .With<BasicDeliverEventArgs, RabbitMessage>(next => (context, token) =>
+            .With<RabbitMessage, BasicDeliverEventArgs>(next => (context, token) =>
             {
                 var testCaller = context.ServiceProvider.GetRequiredService<ITestCaller>();
                 testCaller.Call("SpecificLambdaMiddleware");
@@ -80,7 +80,7 @@ public class RabbitConsumerBuilderShould : IClassFixture<RabbitFixture>
             .WithMiddleware<SpecificConventionalMiddleware>()
             .WithMiddleware<GenericClientSpecificConventionalMiddleware>()
             .WithMiddleware(typeof(GenericClientSpecificConventionalMiddleware<,>))
-            .BuildRabbit<Processor, RabbitMessage>(
+            .BuildRabbit<RabbitMessage, Processor>(
                 new RabbitConsumerParameters("test", "test-queue", ProcessingOrder.Sequential)))
         {
             consumer.Subscribe();
@@ -149,7 +149,7 @@ public class RabbitConsumerBuilderShould : IClassFixture<RabbitFixture>
             return next.Invoke(context, cancellationToken);
         }
     }
-    private class SpecificInterfacedMiddleware : IConsumerMiddleware<BasicDeliverEventArgs, RabbitMessage>
+    private class SpecificInterfacedMiddleware : IConsumerMiddleware<RabbitMessage, BasicDeliverEventArgs>
     {
         private readonly ITestCaller testCaller;
 
@@ -159,8 +159,8 @@ public class RabbitConsumerBuilderShould : IClassFixture<RabbitFixture>
         }
         
         public Task<ProcessResult> InvokeAsync(
-            ConsumerContext<BasicDeliverEventArgs, RabbitMessage> context,
-            ConsumerDelegate<BasicDeliverEventArgs, RabbitMessage> next,
+            ConsumerContext<RabbitMessage, BasicDeliverEventArgs> context,
+            ConsumerDelegate<RabbitMessage, BasicDeliverEventArgs> next,
             CancellationToken cancellationToken)
         {
             testCaller.Call(nameof(SpecificInterfacedMiddleware));
@@ -205,16 +205,16 @@ public class RabbitConsumerBuilderShould : IClassFixture<RabbitFixture>
     }
     private class SpecificConventionalMiddleware
     {
-        private readonly ConsumerDelegate<BasicDeliverEventArgs, RabbitMessage> next;
+        private readonly ConsumerDelegate<RabbitMessage, BasicDeliverEventArgs> next;
 
         public SpecificConventionalMiddleware(
-            ConsumerDelegate<BasicDeliverEventArgs, RabbitMessage> next)
+            ConsumerDelegate<RabbitMessage, BasicDeliverEventArgs> next)
         {
             this.next = next;
         }
 
         public Task<ProcessResult> InvokeAsync(
-            ConsumerContext<BasicDeliverEventArgs, RabbitMessage> context,
+            ConsumerContext<RabbitMessage, BasicDeliverEventArgs> context,
             ITestCaller testCaller,
             CancellationToken cancellationToken)
         {
@@ -251,8 +251,8 @@ public class RabbitConsumerBuilderShould : IClassFixture<RabbitFixture>
             this.next = next;
         }
 
-        public Task<ProcessResult> InvokeAsync<TNativeProperties, TMessage>(
-            ConsumerContext<TNativeProperties, TMessage> context,
+        public Task<ProcessResult> InvokeAsync<TMessage, TNativeProperties>(
+            ConsumerContext<TMessage, TNativeProperties> context,
             ITestCaller testCaller,
             CancellationToken cancellationToken)
         {
@@ -260,22 +260,22 @@ public class RabbitConsumerBuilderShould : IClassFixture<RabbitFixture>
             return next.Invoke(context, cancellationToken);
         }
     }
-    private class GenericClientSpecificConventionalMiddleware<TNativeProperties, TMessage>
+    private class GenericClientSpecificConventionalMiddleware<TMessage, TNativeProperties>
     {
-        private readonly ConsumerDelegate<TNativeProperties, TMessage> next;
+        private readonly ConsumerDelegate<TMessage, TNativeProperties> next;
 
         public GenericClientSpecificConventionalMiddleware(
-            ConsumerDelegate<TNativeProperties, TMessage> next)
+            ConsumerDelegate<TMessage, TNativeProperties> next)
         {
             this.next = next;
         }
 
         public Task<ProcessResult> InvokeAsync(
-            ConsumerContext<TNativeProperties, TMessage> context,
+            ConsumerContext<TMessage, TNativeProperties> context,
             ITestCaller testCaller,
             CancellationToken cancellationToken)
         {
-            testCaller.Call($"{nameof(GenericClientSpecificConventionalMiddleware<TNativeProperties, TMessage>)} with {typeof(TNativeProperties).Name}, {typeof(TMessage).Name}");
+            testCaller.Call($"{nameof(GenericClientSpecificConventionalMiddleware<TMessage, TNativeProperties>)} with {typeof(TNativeProperties).Name}, {typeof(TMessage).Name}");
             return next.Invoke(context, cancellationToken);
         }
     }

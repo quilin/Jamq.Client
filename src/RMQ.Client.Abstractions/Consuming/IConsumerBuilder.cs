@@ -28,8 +28,8 @@ public interface IConsumerBuilder
     /// <typeparam name="TNativeProperties">Client specific incoming message wrapper type</typeparam>
     /// <typeparam name="TMessage">Incoming message type</typeparam>
     /// <returns>Builder itself for chaining</returns>
-    IConsumerBuilder With<TNativeProperties, TMessage>(
-        Func<ConsumerDelegate<TNativeProperties, TMessage>, ConsumerDelegate<TNativeProperties, TMessage>> middleware);
+    IConsumerBuilder With<TMessage, TNativeProperties>(
+        Func<ConsumerDelegate<TMessage, TNativeProperties>, ConsumerDelegate<TMessage, TNativeProperties>> middleware);
 
     /// <summary>
     /// Add middleware to the pipeline
@@ -52,6 +52,6 @@ public interface IConsumerBuilder
     /// <typeparam name="TProcessor">Message processor type</typeparam>
     /// <typeparam name="TMessage">Message type</typeparam>
     /// <returns>Consumer</returns>
-    IConsumer BuildRabbit<TProcessor, TMessage>(RabbitConsumerParameters parameters)
+    IConsumer BuildRabbit<TMessage, TProcessor>(RabbitConsumerParameters parameters)
         where TProcessor : IProcessor<TMessage>;
 }
