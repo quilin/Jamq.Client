@@ -16,7 +16,7 @@ internal class Consumer<TMessage, TProcessor> : IConsumer
     private readonly ILogger? logger;
     private readonly IChannelPool channelPool;
     private readonly IServiceProvider serviceProvider;
-    private readonly ConsumerDelegate<BasicDeliverEventArgs, TMessage> pipeline;
+    private readonly ConsumerDelegate<TMessage, BasicDeliverEventArgs> pipeline;
 
     private readonly object sync = new();
 
@@ -32,7 +32,7 @@ internal class Consumer<TMessage, TProcessor> : IConsumer
         IServiceProvider serviceProvider,
         RabbitConsumerParameters parameters,
         ILogger? logger,
-        IEnumerable<Func<ConsumerDelegate<BasicDeliverEventArgs, TMessage>, ConsumerDelegate<BasicDeliverEventArgs, TMessage>>> middlewares)
+        IEnumerable<Func<ConsumerDelegate<TMessage, BasicDeliverEventArgs>, ConsumerDelegate<TMessage, BasicDeliverEventArgs>>> middlewares)
     {
         this.channelPool = channelPool;
         this.serviceProvider = serviceProvider;
@@ -40,7 +40,7 @@ internal class Consumer<TMessage, TProcessor> : IConsumer
         this.logger = logger;
 
         pipeline = middlewares.Reverse().Aggregate(
-            (ConsumerDelegate<BasicDeliverEventArgs, TMessage>)((context, cancellationToken) =>
+            (ConsumerDelegate<TMessage, BasicDeliverEventArgs>)((context, cancellationToken) =>
             {
                 var processor = context.ServiceProvider.GetRequiredService<TProcessor>();
                 return processor.Process(context.Message!, cancellationToken);
@@ -100,7 +100,7 @@ internal class Consumer<TMessage, TProcessor> : IConsumer
                     ProcessResult processResult;
                     await using (var scope = serviceProvider.CreateAsyncScope())
                     {
-                        var context = new ConsumerContext<BasicDeliverEventArgs, TMessage>(
+                        var context = new ConsumerContext<TMessage, BasicDeliverEventArgs>(
                             scope.ServiceProvider, nativeProperties);
                         processResult = await pipeline.Invoke(context, currentCancellationTokenSource.Token);
                     }

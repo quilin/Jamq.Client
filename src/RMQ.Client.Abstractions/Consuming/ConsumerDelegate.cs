@@ -8,6 +8,6 @@ public delegate Task<ProcessResult> ConsumerDelegate<TNativeProperties>(
     ConsumerContext<TNativeProperties> context,
     CancellationToken cancellationToken);
 
-public delegate Task<ProcessResult> ConsumerDelegate<TNativeProperties, TMessage>(
-    ConsumerContext<TNativeProperties, TMessage> context,
+public delegate Task<ProcessResult> ConsumerDelegate<TMessage, TNativeProperties>(
+    ConsumerContext<TMessage, TNativeProperties> context,
     CancellationToken cancellationToken);
