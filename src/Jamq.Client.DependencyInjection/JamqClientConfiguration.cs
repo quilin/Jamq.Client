@@ -6,13 +6,13 @@ using Jamq.Client.Producing;
 
 namespace Jamq.Client.DependencyInjection;
 
-public class RmqClientConfiguration
+public class JamqClientConfiguration
 {
     private readonly IServiceCollection serviceCollection;
     private readonly List<Func<IProducerBuilder, IProducerBuilder>> producerBuilderRegistrations = new();
     private readonly List<Func<IConsumerBuilder, IConsumerBuilder>> consumerBuilderRegistrations = new();
 
-    public RmqClientConfiguration(IServiceCollection serviceCollection)
+    public JamqClientConfiguration(IServiceCollection serviceCollection)
     {
         this.serviceCollection = serviceCollection;
     }

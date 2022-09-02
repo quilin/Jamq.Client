@@ -6,14 +6,14 @@ using Jamq.Client.Rabbit.Defaults;
 
 namespace Jamq.Client.Rabbit.DependencyInjection;
 
-public static class RmqClientConfigurationExtensions
+public static class JamqClientConfigurationExtensions
 {
-    public static RmqClientConfiguration UseRabbit(
-        this RmqClientConfiguration configuration, RabbitConnectionParameters parameters) =>
+    public static JamqClientConfiguration UseRabbit(
+        this JamqClientConfiguration configuration, RabbitConnectionParameters parameters) =>
         UseRabbit(configuration, _ => parameters);
 
-    public static RmqClientConfiguration UseRabbit(
-        this RmqClientConfiguration builder,
+    public static JamqClientConfiguration UseRabbit(
+        this JamqClientConfiguration builder,
         Func<IServiceProvider, RabbitConnectionParameters> parametersProvider)
     {
         builder.GetServiceCollection()

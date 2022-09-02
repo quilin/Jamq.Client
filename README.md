@@ -1,4 +1,6 @@
-# RMQ.Client
+# Jamq.Client
+
+Just another message queueing client :)
 
 ## Reasoning
 
@@ -14,20 +16,20 @@ This wrapper has been written as a high level wrapper over standard RabbitMQ.Cli
 ## How to use it?
 
 First you need to install the according packages from NuGet:
-- `RMQ.Client.Abstractions` contains all abstract contracts and interfaces to use in your code
-- `RMQ.Client` contains the implementations for the abstractions above
-- `RMQ.Client.DependencyInjection` contains basic extensions for your `IServiceCollection` for proper dependency registration
-- `RMQ.Client.Rabbit` contains the contracts and implementations to work with RabbitMQ
-- `RMQ.Client.Rabbit.DependencyInjection` contains extensions for registering the RabbitMQ implementation
+- `Jamq.Client.Abstractions` contains all abstract contracts and interfaces to use in your code
+- `Jamq.Client` contains the implementations for the abstractions above
+- `Jamq.Client.DependencyInjection` contains basic extensions for your `IServiceCollection` for proper dependency registration
+- `Jamq.Client.Rabbit` contains the contracts and implementations to work with RabbitMQ
+- `Jamq.Client.Rabbit.DependencyInjection` contains extensions for registering the RabbitMQ implementation
 
-In common architecture you would have the main endpoint project and some domain logic projects separated from each other. In this case you might want to use `RMQ.Client.Abstractions` package for your domain projects and add the `RMQ.Client` and `RMQ.Client.DependencyInjection` to the API (endpoint) project.
+In common architecture you would have the main endpoint project and some domain logic projects separated from each other. In this case you might want to use `Jamq.Client.Abstractions` package for your domain projects and add the `Jamq.Client` and `Jamq.Client.DependencyInjection` to the API (endpoint) project.
 
 Now you can use the `ConfigureServices` method of your `Startup.cs` to register the dependencies:
 
 ```csharp
 public void ConfigureServices(IServiceCollection services)
 {
-    services.AddRmqClient()
+    services.AddJamqClient()
         .WithRabbit(new RabbitConnectionParameters())
         .Build();
 }
@@ -154,7 +156,7 @@ If you don't want to bother flushing and adding middlewares each time you create
 ```csharp
 public void ConfigureServices(IServiceCollection services)
 {
-    services.AddRmqClient()
+    services.AddJamqClient()
         .WithRabbit(new RabbitConnectionParameters())
         .Build(producerBuilder => producerBuilder.Flush()
             .WithMiddleware<CustomEncodingMiddleware>()

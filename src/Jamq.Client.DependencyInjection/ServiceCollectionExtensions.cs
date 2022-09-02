@@ -18,16 +18,16 @@ public static class ServiceCollectionExtensions
     /// <param name="producerBuilderDefaults">Default producer builder configuration</param>
     /// <param name="consumerBuilderDefaults">Default consumer builder configuration</param>
     /// <returns>Service collection itself for chaining</returns>
-    public static IServiceCollection AddRmqClient(
+    public static IServiceCollection AddJamqClient(
         this IServiceCollection services,
-        Action<RmqClientConfiguration> configure,
+        Action<JamqClientConfiguration> configure,
         Func<IProducerBuilder, IProducerBuilder>? producerBuilderDefaults = null,
         Func<IConsumerBuilder, IConsumerBuilder>? consumerBuilderDefaults = null)
     {
-        var rmqClientBuilder = new RmqClientConfiguration(services);
-        configure.Invoke(rmqClientBuilder);
+        var jamqClientConfiguration = new JamqClientConfiguration(services);
+        configure.Invoke(jamqClientConfiguration);
 
-        rmqClientBuilder.Register(producerBuilderDefaults, consumerBuilderDefaults);
+        jamqClientConfiguration.Register(producerBuilderDefaults, consumerBuilderDefaults);
 
         return services;
     }
