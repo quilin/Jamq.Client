@@ -11,8 +11,6 @@ public class DefaultBodyDecodingMiddleware<TMessage> : IConsumerMiddleware<strin
         ConsumerDelegate<string, TMessage, BasicDeliverEventArgs> next,
         CancellationToken cancellationToken)
     {
-        context.Key = context.NativeProperties.RoutingKey;
-
         var message = JsonSerializer.Deserialize<TMessage>(
             context.NativeProperties.Body.Span, DefaultBodyEncodingSettings.SerializerOptions);
         context.Message = message;

@@ -17,12 +17,12 @@ public static class ServiceCollectionExtensions
 {
     /// <summary>
     /// Register required dependencies for RMQ Client
-    /// <remarks>If you don't want to use default <see cref="DefaultBodyEncodingMiddleware" /> for either consumer or producer, you can use <see cref="IProducerBuilder.Flush" /> method of the builder in defaults factory parameters</remarks>
+    /// <remarks>If you don't want to use default <see cref="DefaultBodyEncodingMiddleware{TMessage}" /> for either consumer or producer, you can use <see cref="IProducerBuilder.Flush" /> method of the builder in defaults factory parameters</remarks>
     /// </summary>
     /// <param name="services">Service collection</param>
     /// <param name="parameters">MQ connection parameters</param>
-    /// <param name="producerBuilderDefaults">Default producer builder settings, adds <see cref="DefaultBodyEncodingMiddleware" /> by default</param>
-    /// <param name="consumerBuilderDefaults">Default consumer builder settings, adds <see cref="DefaultBodyEncodingMiddleware" /> by default</param>
+    /// <param name="producerBuilderDefaults">Default producer builder settings, adds <see cref="DefaultBodyEncodingMiddleware{TMessage}" /> by default</param>
+    /// <param name="consumerBuilderDefaults">Default consumer builder settings, adds <see cref="DefaultBodyEncodingMiddleware{TMessage}" /> by default</param>
     /// <returns>Service collection itself for chaining</returns>
     public static IServiceCollection AddRmqClient(
         this IServiceCollection services,
@@ -42,12 +42,12 @@ public static class ServiceCollectionExtensions
             .AddSingleton(sp => CreateConnectionFactory(parametersProvider.Invoke(sp)))
             .AddSingleton<IProducerChannelPool, ChannelPool>()
             .AddSingleton<IConsumerChannelPool, ChannelPool>()
-            .AddScoped<DefaultBodyEncodingMiddleware>()
+            .AddScoped(typeof(DefaultBodyEncodingMiddleware<>))
             .AddScoped(typeof(DefaultBodyDecodingMiddleware<>));
 
         producerBuilderDefaults ??= builder => builder;
         services.AddTransient(provider => producerBuilderDefaults(new ProducerBuilder(provider)
-            .WithMiddleware<DefaultBodyEncodingMiddleware>()));
+            .WithMiddleware(typeof(DefaultBodyEncodingMiddleware<>))));
 
         consumerBuilderDefaults ??= builder => builder;
         services.AddTransient(provider => consumerBuilderDefaults(new ConsumerBuilder(provider)

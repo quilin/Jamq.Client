@@ -7,6 +7,38 @@ namespace RMQ.Client;
 
 internal static class MiddlewareCompiler
 {
+    /// <summary>
+    /// Given
+    /// class MyMiddleware{TKey} : IProducerMiddleware{TKey, string, Props}
+    /// for consumer {long, string, Props}
+    /// make generic type MyMiddleware{long},
+    ///
+    /// Given
+    /// class MyMiddleware{TProps, TMessage} : IProducerMiddleware{string, TMessage, TProps}
+    /// for consumer {string, MyMessage, Props}
+    /// make generic type MyMiddleware{Props, MyMessage}
+    /// </summary>
+    /// <param name="middlewareType"></param>
+    /// <returns></returns>
+    public static (bool Success, Type GenericType) TryMatchGenericInterface<TMiddleware>(Type middlewareType)
+    {
+        var genericTypeDefinition = typeof(TMiddleware).GetGenericTypeDefinition();
+        if (middlewareType.GetInterfaces().All(i => i.GetGenericTypeDefinition() != genericTypeDefinition))
+        {
+            return (false, middlewareType);
+        }
+        
+        var genericArguments = typeof(TMiddleware).GetGenericArguments();
+        var combinations = genericArguments.GetCombinations(middlewareType.GetGenericArguments().Length);
+
+        var genericType = combinations
+            .Select(c => middlewareType.MakeGenericType(c.ToArray()))
+            .FirstOrDefault(typeof(TMiddleware).IsAssignableFrom);
+        return genericType is null
+            ? (false, middlewareType)
+            : (true, genericType);
+    }
+    
     public static object CreateInstance<TDelegate>(
         Type type, object[] args, IServiceProvider serviceProvider, TDelegate delegateArgument)
     {

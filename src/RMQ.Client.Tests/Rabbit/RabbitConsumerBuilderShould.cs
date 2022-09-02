@@ -140,7 +140,7 @@ public class RabbitConsumerBuilderShould : IClassFixture<RabbitFixture>
                 new RabbitConsumerParameters("test", "queue", ProcessingOrder.Sequential));
         consumer.Subscribe();
 
-        var producer = fixture.GetProducerBuilder().BuildRabbit(new RabbitProducerParameters("exchange"));
+        var producer = fixture.GetProducerBuilder().BuildRabbit<RabbitMessage>(new RabbitProducerParameters("exchange"));
         await producer.Send("key", new RabbitMessage("message"), CancellationToken.None);
 
         await Task.Delay(100);
@@ -164,7 +164,7 @@ public class RabbitConsumerBuilderShould : IClassFixture<RabbitFixture>
                 new RabbitConsumerParameters("test", "queue", ProcessingOrder.Sequential));
         consumer.Subscribe();
 
-        var producer = fixture.GetProducerBuilder().BuildRabbit(new RabbitProducerParameters("exchange"));
+        var producer = fixture.GetProducerBuilder().BuildRabbit<RabbitMessage>(new RabbitProducerParameters("exchange"));
         await producer.Send("key", new RabbitMessage("message"), CancellationToken.None);
 
         await Task.Delay(100);
@@ -188,7 +188,7 @@ public class RabbitConsumerBuilderShould : IClassFixture<RabbitFixture>
                 new RabbitConsumerParameters("test", "queue", ProcessingOrder.Sequential));
         consumer.Subscribe();
 
-        var producer = fixture.GetProducerBuilder().BuildRabbit(new RabbitProducerParameters("exchange"));
+        var producer = fixture.GetProducerBuilder().BuildRabbit<RabbitMessage>(new RabbitProducerParameters("exchange"));
         await producer.Send("key", new RabbitMessage("message"), CancellationToken.None);
 
         await Task.Delay(100);
@@ -228,7 +228,7 @@ public class RabbitConsumerBuilderShould : IClassFixture<RabbitFixture>
                 new RabbitConsumerParameters("test", "queue", ProcessingOrder.Sequential));
         consumer.Subscribe();
 
-        var producer = fixture.GetProducerBuilder().BuildRabbit(new RabbitProducerParameters("exchange"));
+        var producer = fixture.GetProducerBuilder().BuildRabbit<RabbitMessage>(new RabbitProducerParameters("exchange"));
         await producer.Send("key", new RabbitMessage("message"), CancellationToken.None);
 
         await Task.Delay(100);
@@ -268,7 +268,7 @@ public class RabbitConsumerBuilderShould : IClassFixture<RabbitFixture>
                 new RabbitConsumerParameters("test", "queue", ProcessingOrder.Sequential));
         consumer.Subscribe();
 
-        var producer = fixture.GetProducerBuilder().BuildRabbit(new RabbitProducerParameters("exchange"));
+        var producer = fixture.GetProducerBuilder().BuildRabbit<RabbitMessage>(new RabbitProducerParameters("exchange"));
         await producer.Send("key", new RabbitMessage("message"), CancellationToken.None);
 
         await Task.Delay(100);
@@ -307,7 +307,7 @@ public class RabbitConsumerBuilderShould : IClassFixture<RabbitFixture>
                 new RabbitConsumerParameters("test", "queue", ProcessingOrder.Sequential));
         consumer.Subscribe();
 
-        var producer = fixture.GetProducerBuilder().BuildRabbit(new RabbitProducerParameters("exchange"));
+        var producer = fixture.GetProducerBuilder().BuildRabbit<RabbitMessage>(new RabbitProducerParameters("exchange"));
         await producer.Send("key", new RabbitMessage("message"), CancellationToken.None);
 
         await Task.Delay(100);
@@ -345,7 +345,7 @@ public class RabbitConsumerBuilderShould : IClassFixture<RabbitFixture>
                 new RabbitConsumerParameters("test", "queue", ProcessingOrder.Sequential));
         consumer.Subscribe();
 
-        var producer = fixture.GetProducerBuilder().BuildRabbit(new RabbitProducerParameters("exchange"));
+        var producer = fixture.GetProducerBuilder().BuildRabbit<RabbitMessage>(new RabbitProducerParameters("exchange"));
         await producer.Send("key", new RabbitMessage("message"), CancellationToken.None);
 
         await Task.Delay(100);
@@ -383,7 +383,7 @@ public class RabbitConsumerBuilderShould : IClassFixture<RabbitFixture>
                 new RabbitConsumerParameters("test", "queue", ProcessingOrder.Sequential));
         consumer.Subscribe();
 
-        var producer = fixture.GetProducerBuilder().BuildRabbit(new RabbitProducerParameters("exchange"));
+        var producer = fixture.GetProducerBuilder().BuildRabbit<RabbitMessage>(new RabbitProducerParameters("exchange"));
         await producer.Send("key", new RabbitMessage("message"), CancellationToken.None);
 
         await Task.Delay(100);
@@ -422,7 +422,7 @@ public class RabbitConsumerBuilderShould : IClassFixture<RabbitFixture>
                 new RabbitConsumerParameters("test", "queue", ProcessingOrder.Sequential));
         consumer.Subscribe();
 
-        var producer = fixture.GetProducerBuilder().BuildRabbit(new RabbitProducerParameters("exchange"));
+        var producer = fixture.GetProducerBuilder().BuildRabbit<RabbitMessage>(new RabbitProducerParameters("exchange"));
         await producer.Send("key", new RabbitMessage("message"), CancellationToken.None);
 
         await Task.Delay(100);
@@ -462,7 +462,7 @@ public class RabbitConsumerBuilderShould : IClassFixture<RabbitFixture>
                 new RabbitConsumerParameters("test", "queue", ProcessingOrder.Sequential));
         consumer.Subscribe();
 
-        var producer = fixture.GetProducerBuilder().BuildRabbit(new RabbitProducerParameters("exchange"));
+        var producer = fixture.GetProducerBuilder().BuildRabbit<RabbitMessage>(new RabbitProducerParameters("exchange"));
         await producer.Send("key", new RabbitMessage("message"), CancellationToken.None);
 
         await Task.Delay(100);
@@ -501,7 +501,7 @@ public class RabbitConsumerBuilderShould : IClassFixture<RabbitFixture>
                 new RabbitConsumerParameters("test", "queue", ProcessingOrder.Sequential));
         consumer.Subscribe();
 
-        var producer = fixture.GetProducerBuilder().BuildRabbit(new RabbitProducerParameters("exchange"));
+        var producer = fixture.GetProducerBuilder().BuildRabbit<RabbitMessage>(new RabbitProducerParameters("exchange"));
         await producer.Send("key", new RabbitMessage("message"), CancellationToken.None);
 
         await Task.Delay(100);
@@ -540,7 +540,7 @@ public class RabbitConsumerBuilderShould : IClassFixture<RabbitFixture>
                 new RabbitConsumerParameters("test", "queue", ProcessingOrder.Sequential));
         consumer.Subscribe();
 
-        var producer = fixture.GetProducerBuilder().BuildRabbit(new RabbitProducerParameters("exchange"));
+        var producer = fixture.GetProducerBuilder().BuildRabbit<RabbitMessage>(new RabbitProducerParameters("exchange"));
         await producer.Send("key", new RabbitMessage("message"), CancellationToken.None);
 
         await Task.Delay(100);

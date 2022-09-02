@@ -1,7 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
-using RabbitMQ.Client;
 using RMQ.Client.Abstractions;
 using RMQ.Client.Abstractions.Exceptions;
 using RMQ.Client.Abstractions.Producing;
@@ -100,7 +99,7 @@ public class RabbitProducerBuilderShould : IClassFixture<RabbitFixture>
     {
         var producerBuilder = fixture.GetProducerBuilder()
             .WithMiddleware(middleware);
-        producerBuilder.Invoking(b => b.BuildRabbit(new RabbitProducerParameters("test-exchange")))
+        producerBuilder.Invoking(b => b.BuildRabbit<string>(new RabbitProducerParameters("test-exchange")))
             .Should().Throw<ProducerBuilderMiddlewareConventionException>();
     }
 
@@ -113,7 +112,7 @@ public class RabbitProducerBuilderShould : IClassFixture<RabbitFixture>
                 caller.Object.Call("sut");
                 return next(context, ct);
             })
-            .BuildRabbit(new RabbitProducerParameters("test"));
+            .BuildRabbit<string>(new RabbitProducerParameters("test"));
         await producer.Send("whatever", "test message", CancellationToken.None);
 
         caller.Verify(c => c.Call("sut"), Times.Once);
@@ -121,15 +120,15 @@ public class RabbitProducerBuilderShould : IClassFixture<RabbitFixture>
     }
 
     [Fact]
-    public async Task IncludeSpecificLambdaMiddleware()
+    public async Task IncludeMessageAgnosticLambdaMiddleware()
     {
         using var producer = fixture.GetProducerBuilder()
-            .With<IBasicProperties>(next => (context, ct) =>
+            .With<RabbitProducerProperties>(next => (context, ct) =>
             {
                 caller.Object.Call("sut");
                 return next(context, ct);
             })
-            .BuildRabbit(new RabbitProducerParameters("test"));
+            .BuildRabbit<string>(new RabbitProducerParameters("test"));
         await producer.Send("whatever", "test message", CancellationToken.None);
 
         caller.Verify(c => c.Call("sut"), Times.Once);
@@ -158,14 +157,14 @@ public class RabbitProducerBuilderShould : IClassFixture<RabbitFixture>
         fixture.ServiceCollection.AddScoped<ClientAgnosticInterfacedMiddleware>();
         using var producer = fixture.GetProducerBuilder()
             .WithMiddleware<ClientAgnosticInterfacedMiddleware>()
-            .BuildRabbit(new RabbitProducerParameters("test"));
+            .BuildRabbit<string>(new RabbitProducerParameters("test"));
         await producer.Send("whatever", "test message", CancellationToken.None);
 
         caller.Verify(c => c.Call("ClientAgnosticInterfacedMiddleware"), Times.Once);
         caller.VerifyNoOtherCalls();
     }
 
-    private class ClientSpecificInterfacedMiddleware : IProducerMiddleware<IBasicProperties>
+    private class ClientSpecificInterfacedMiddleware : IProducerMiddleware<RabbitProducerProperties>
     {
         private readonly ITestCaller testCaller;
 
@@ -175,8 +174,8 @@ public class RabbitProducerBuilderShould : IClassFixture<RabbitFixture>
         }
 
         public Task InvokeAsync(
-            ProducerContext<IBasicProperties> context,
-            ProducerDelegate<IBasicProperties> next,
+            ProducerContext<RabbitProducerProperties> context,
+            ProducerDelegate<RabbitProducerProperties> next,
             CancellationToken cancellationToken)
         {
             testCaller.Call(nameof(ClientSpecificInterfacedMiddleware));
@@ -190,13 +189,12 @@ public class RabbitProducerBuilderShould : IClassFixture<RabbitFixture>
         fixture.ServiceCollection.AddScoped<ClientSpecificInterfacedMiddleware>();
         using var producer = fixture.GetProducerBuilder()
             .WithMiddleware<ClientSpecificInterfacedMiddleware>()
-            .BuildRabbit(new RabbitProducerParameters("test"));
+            .BuildRabbit<string>(new RabbitProducerParameters("test"));
         await producer.Send("whatever", "test message", CancellationToken.None);
 
         caller.Verify(c => c.Call("ClientSpecificInterfacedMiddleware"), Times.Once);
         caller.VerifyNoOtherCalls();
     }
-
 
     private class ClientAgnosticConventionalMiddleware
     {
@@ -223,7 +221,7 @@ public class RabbitProducerBuilderShould : IClassFixture<RabbitFixture>
     {
         using var producer = fixture.GetProducerBuilder()
             .WithMiddleware<ClientAgnosticConventionalMiddleware>()
-            .BuildRabbit(new RabbitProducerParameters("test"));
+            .BuildRabbit<string>(new RabbitProducerParameters("test"));
         await producer.Send("whatever", "test message", CancellationToken.None);
 
         caller.Verify(c => c.Call("ClientAgnosticConventionalMiddleware"), Times.Once);
@@ -232,23 +230,20 @@ public class RabbitProducerBuilderShould : IClassFixture<RabbitFixture>
 
     private class ClientSpecificConventionalMiddleware
     {
-        private readonly ProducerDelegate<IBasicProperties> next;
+        private readonly ProducerDelegate<RabbitProducerProperties> next;
 
         public ClientSpecificConventionalMiddleware(
-            ProducerDelegate<IBasicProperties> next)
+            ProducerDelegate<RabbitProducerProperties> next)
         {
             this.next = next;
         }
 
         public Task InvokeAsync(
-            ProducerContext<IBasicProperties> context,
+            ProducerContext<RabbitProducerProperties> context,
             ITestCaller testCaller,
             CancellationToken cancellationToken)
         {
-            if (context.NativeProperties is not null)
-            {
-                context.NativeProperties.Persistent = true;
-            }
+            context.NativeProperties.BasicProperties.Persistent = true;
 
             testCaller.Call(nameof(ClientSpecificConventionalMiddleware));
             return next(context, cancellationToken);
@@ -260,7 +255,7 @@ public class RabbitProducerBuilderShould : IClassFixture<RabbitFixture>
     {
         using var producer = fixture.GetProducerBuilder()
             .WithMiddleware<ClientSpecificConventionalMiddleware>()
-            .BuildRabbit(new RabbitProducerParameters("test"));
+            .BuildRabbit<string>(new RabbitProducerParameters("test"));
         await producer.Send("whatever", "test message", CancellationToken.None);
 
         caller.Verify(c => c.Call("ClientSpecificConventionalMiddleware"), Times.Once);
@@ -292,7 +287,7 @@ public class RabbitProducerBuilderShould : IClassFixture<RabbitFixture>
         fixture.ServiceCollection.AddScoped<ClientSpecificWrongInterfacedMiddleware>();
         using var producer = fixture.GetProducerBuilder()
             .WithMiddleware<ClientSpecificWrongInterfacedMiddleware>()
-            .BuildRabbit(new RabbitProducerParameters("test"));
+            .BuildRabbit<string>(new RabbitProducerParameters("test"));
         await producer.Send("whatever", "test message", CancellationToken.None);
 
         caller.VerifyNoOtherCalls();
@@ -323,10 +318,10 @@ public class RabbitProducerBuilderShould : IClassFixture<RabbitFixture>
     {
         using var producer = fixture.GetProducerBuilder()
             .WithMiddleware(typeof(GenericClientSpecificConventionalMiddleware<>))
-            .BuildRabbit(new RabbitProducerParameters("test"));
+            .BuildRabbit<string>(new RabbitProducerParameters("test"));
         await producer.Send("whatever", "test message", CancellationToken.None);
 
-        caller.Verify(c => c.Call("GenericClientSpecificConventionalMiddleware with IBasicProperties"), Times.Once);
+        caller.Verify(c => c.Call("GenericClientSpecificConventionalMiddleware with RabbitProducerProperties"), Times.Once);
         caller.VerifyNoOtherCalls();
     }
 
@@ -354,7 +349,7 @@ public class RabbitProducerBuilderShould : IClassFixture<RabbitFixture>
     {
         using var producer = fixture.GetProducerBuilder()
             .WithMiddleware<GenericClientSpecificConventionalMiddleware>()
-            .BuildRabbit(new RabbitProducerParameters("test"));
+            .BuildRabbit<string>(new RabbitProducerParameters("test"));
         await producer.Send("whatever", "test message", CancellationToken.None);
 
         caller.Verify(c => c.Call("GenericClientSpecificConventionalMiddleware"), Times.Once);
@@ -373,7 +368,7 @@ public class RabbitProducerBuilderShould : IClassFixture<RabbitFixture>
     //         .WithMiddleware<ClientSpecificWrongInterfacedMiddleware>()
     //         .WithMiddleware(typeof(GenericClientSpecificConventionalMiddleware<>))
     //         .WithMiddleware<GenericClientSpecificConventionalMiddleware>()
-    //         .BuildRabbit(new RabbitProducerParameters("test-exchange"));
+    //         .BuildRabbit<string>(new RabbitProducerParameters("test-exchange"));
     //     await producer.Send("whatever", "test-message", CancellationToken.None);
     //
     //     caller.Verify(c => c.Call("ClientAgnosticLambdaMiddleware"));

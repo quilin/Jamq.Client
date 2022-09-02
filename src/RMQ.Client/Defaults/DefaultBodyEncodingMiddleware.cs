@@ -3,15 +3,15 @@ using RMQ.Client.Abstractions.Producing;
 
 namespace RMQ.Client.Defaults;
 
-public class DefaultBodyEncodingMiddleware : IProducerMiddleware
+public class DefaultBodyEncodingMiddleware<TMessage> : IProducerMiddleware<string, TMessage, RabbitProducerProperties>
 {
     public Task InvokeAsync(
-        ProducerContext context,
-        ProducerDelegate next,
+        ProducerContext<string, TMessage, RabbitProducerProperties> context,
+        ProducerDelegate<string, TMessage, RabbitProducerProperties> next,
         CancellationToken cancellationToken)
     {
         var body = JsonSerializer.SerializeToUtf8Bytes(context.Message, DefaultBodyEncodingSettings.SerializerOptions);
-        context.Body = body;
+        context.NativeProperties.Body = body;
         return next.Invoke(context, cancellationToken);
     }
 }

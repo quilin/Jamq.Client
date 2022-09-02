@@ -1,6 +1,5 @@
 ﻿using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
-using RabbitMQ.Client;
 using RMQ.Client.Abstractions;
 using RMQ.Client.Abstractions.Exceptions;
 using RMQ.Client.Abstractions.Producing;
@@ -32,6 +31,14 @@ internal class ProducerBuilder : IProducerBuilder
         return this;
     }
 
+    public IProducerBuilder With<TKey, TMessage, TNativeProperties>(
+        Func<ProducerDelegate<TKey, TMessage, TNativeProperties>, ProducerDelegate<TKey, TMessage, TNativeProperties>>
+            middleware)
+    {
+        middlewares.Add(middleware);
+        return this;
+    }
+
     public IProducerBuilder WithMiddleware(Type middlewareType, params object[] args)
     {
         middlewares.Add((middlewareType, args));
@@ -44,43 +51,83 @@ internal class ProducerBuilder : IProducerBuilder
         return this;
     }
 
-    public IProducer BuildRabbit(RabbitProducerParameters parameters)
+    public IProducer<string, TMessage> BuildRabbit<TMessage>(RabbitProducerParameters parameters)
     {
-        var components = middlewares.Select(ToPipelineStep<IBasicProperties>);
+        var components = middlewares.Select(ToPipelineStep<string, TMessage, RabbitProducerProperties>);
         var channelPool = serviceProvider.GetRequiredService<IProducerChannelPool>();
-        return new Producer(channelPool, serviceProvider, parameters, components);
+        return new RabbitProducer<TMessage>(channelPool, serviceProvider, parameters, components);
     }
 
-    private Func<ProducerDelegate<TNativeProperties>, ProducerDelegate<TNativeProperties>>
-        ToPipelineStep<TNativeProperties>(object description) => description switch
+    private Func<ProducerDelegate<TKey, TMessage, TNativeProperties>,
+            ProducerDelegate<TKey, TMessage, TNativeProperties>>
+        ToPipelineStep<TKey, TMessage, TNativeProperties>(object description) => description switch
     {
-        // Lambda client-specific middleware
-        Func<ProducerDelegate<TNativeProperties>, ProducerDelegate<TNativeProperties>> middleware => middleware,
+        // Lambda specific middleware
+        Func<ProducerDelegate<TKey, TMessage, TNativeProperties>, ProducerDelegate<TKey, TMessage, TNativeProperties>>
+            middleware => middleware,
 
-        // Client-specific middleware
-        (Type type, object[]) when typeof(IProducerMiddleware<TNativeProperties>).GetTypeInfo()
-            .IsAssignableFrom(type.GetTypeInfo()) => next => (context, ct) =>
+        // Lambda message-agnostic middleware
+        Func<ProducerDelegate<TNativeProperties>, ProducerDelegate<TNativeProperties>> messageAgnosticMiddleware => next => (context, ct) =>
         {
-            var middleware = (IProducerMiddleware<TNativeProperties>)context.ServiceProvider.GetRequiredService(type);
-            return middleware.InvokeAsync(context, next, ct);
+            var messageAgnosticDelegate = (ProducerDelegate<TNativeProperties>) ((messageAgnosticContext, token) =>
+                next.Invoke((ProducerContext<TKey, TMessage, TNativeProperties>) messageAgnosticContext, token));
+            var resultingDelegate = messageAgnosticMiddleware.Invoke(messageAgnosticDelegate);
+            return resultingDelegate.Invoke(context, ct);
         },
 
         // Lambda client-agnostic middleware
         Func<ProducerDelegate, ProducerDelegate> clientAgnosticMiddleware => next => (context, ct) =>
         {
-            var clientAgnosticDelegate = (ProducerDelegate)((clientAgnosticContext, cancellationToken) =>
-                next.Invoke((ProducerContext<TNativeProperties>)clientAgnosticContext, cancellationToken));
-            var resultingDelegate = clientAgnosticMiddleware(clientAgnosticDelegate);
+            var clientAgnosticDelegate = (ProducerDelegate) ((clientAgnosticContext, token) =>
+                next.Invoke((ProducerContext<TKey, TMessage, TNativeProperties>) clientAgnosticContext, token));
+            var resultingDelegate = clientAgnosticMiddleware.Invoke(clientAgnosticDelegate);
             return resultingDelegate.Invoke(context, ct);
         },
 
-        // Client-agnostic middleware
+        // Interface specific middleware
+        (Type type, object[]) when typeof(IProducerMiddleware<TKey, TMessage, TNativeProperties>).GetTypeInfo()
+            .IsAssignableFrom(type.GetTypeInfo()) => next => (context, ct) =>
+            {
+                var middleware = (IProducerMiddleware<TKey, TMessage, TNativeProperties>) context.ServiceProvider
+                    .GetRequiredService(type);
+                return middleware.InvokeAsync(context, next, ct);
+            },
+
+        // Wild magic is going on here:
+        // When we see the generic type that has a single IProducerMiddleware<,,> interface
+        // we try to find the matching sequence of TKey, TMessage and TNativeProperties combinations
+        // that will result in given middleware class to implement IProducerMiddleware<TKey, TMessage, TProps>.
+        // By doing that we enable any declaration of generic middleware with an interface, such as
+        // class Mw<TMessage> : IProducerMiddleware<string, TMessage, Props>
+        // class Mw<TProps, TMessage> : IProducerMiddleware<long, TMessage, TProps> - the arguments are mixed, but it doesn't matter!
+        // class Mw<TProps, TKey, TMessage> : IProducerMiddleware<TKey, TMessage, TProps> - event that crazy stuff works
+        (Type {IsGenericType: true} type, object[]) when
+            MiddlewareCompiler.TryMatchGenericInterface<IProducerMiddleware<TKey, TMessage, TNativeProperties>>(type) is
+                {Success: true, GenericType: var genericType} =>
+            next => (context, ct) =>
+            {
+                var middleware = (IProducerMiddleware<TKey, TMessage, TNativeProperties>) context.ServiceProvider
+                    .GetRequiredService(genericType);
+                return middleware.InvokeAsync(context, next, ct);
+            },
+
+        // Interface message-agnostic middleware
+        (Type type, object[]) when typeof(IProducerMiddleware<TNativeProperties>).GetTypeInfo()
+            .IsAssignableFrom(type.GetTypeInfo()) => next => (context, ct) =>
+        {
+            var middleware = (IProducerMiddleware<TNativeProperties>) context.ServiceProvider.GetRequiredService(type);
+            var messageAgnosticDelegate = (ProducerDelegate<TNativeProperties>) ((messageAgnosticContext, token) =>
+                next.Invoke((ProducerContext<TKey, TMessage, TNativeProperties>) messageAgnosticContext, token));
+            return middleware.InvokeAsync(context, messageAgnosticDelegate, ct);
+        },
+
+        // Interface client-agnostic middleware
         (Type type, object[]) when typeof(IProducerMiddleware).GetTypeInfo()
             .IsAssignableFrom(type.GetTypeInfo()) => next => (context, ct) =>
         {
-            var middleware = (IProducerMiddleware)context.ServiceProvider.GetRequiredService(type);
-            var clientAgnosticDelegate = (ProducerDelegate)((clientAgnosticContext, cancellationToken) =>
-                next.Invoke((ProducerContext<TNativeProperties>)clientAgnosticContext, cancellationToken));
+            var middleware = (IProducerMiddleware) context.ServiceProvider.GetRequiredService(type);
+            var clientAgnosticDelegate = (ProducerDelegate) ((clientAgnosticContext, cancellationToken) =>
+                next.Invoke((ProducerContext<TKey, TMessage, TNativeProperties>) clientAgnosticContext, cancellationToken));
             return middleware.InvokeAsync(context, clientAgnosticDelegate, ct);
         },
 
@@ -90,7 +137,7 @@ internal class ProducerBuilder : IProducerBuilder
             var methodInfos = type.GetMethods(BindingFlags.Instance | BindingFlags.Public)
                 .Where(mi => mi.Name == nameof(IProducerMiddleware.InvokeAsync))
                 .ToArray();
-            var methodInfo = (uint)methodInfos.Length switch
+            var methodInfo = (uint) methodInfos.Length switch
             {
                 1 => methodInfos[0],
                 0 => throw ProducerBuilderMiddlewareConventionException.NoInvokeAsyncMethod(type),
@@ -112,28 +159,46 @@ internal class ProducerBuilder : IProducerBuilder
             if (contextParameterType == typeof(ProducerContext))
             {
                 var instance = MiddlewareCompiler.CreateInstance<ProducerDelegate>(type, args, serviceProvider,
-                    (context, ct) => next((ProducerContext<TNativeProperties>)context, ct));
-                if (parameters.Length == 1)
+                    (context, ct) => next((ProducerContext<TKey, TMessage, TNativeProperties>) context, ct));
+                if (parameters.Length == 2)
                 {
                     return methodInfo.CreateDelegate<ProducerDelegate>(instance).Invoke;
                 }
 
-                var factory = MiddlewareCompiler.Compile<ProducerContext<TNativeProperties>, Task>(methodInfo, parameters);
+                var factory = MiddlewareCompiler
+                    .Compile<ProducerContext<TKey, TMessage, TNativeProperties>, Task>(methodInfo, parameters);
                 return (context, ct) => factory(instance, context, context.ServiceProvider, ct);
             }
 
-            // Default client-specific middleware
+            // Default message-agnostic middleware
             // e.g. class TMw { ctor(ProducerDelegate<Props>){} InvokeAsync(ProducerContext<Props> ...) }
             if (contextParameterType == typeof(ProducerContext<TNativeProperties>))
             {
-                var instance = MiddlewareCompiler.CreateInstance(type, args, serviceProvider, next);
-                if (parameters.Length == 1)
+                var instance = MiddlewareCompiler.CreateInstance<ProducerDelegate<TNativeProperties>>(type, args, serviceProvider,
+                    (context, ct) => next.Invoke((ProducerContext<TKey, TMessage, TNativeProperties>) context, ct));
+                if (parameters.Length == 2)
                 {
-                    return methodInfo.CreateDelegate<ProducerDelegate<TNativeProperties>>(instance);
+                    return methodInfo.CreateDelegate<ProducerDelegate<TNativeProperties>>(instance).Invoke;
                 }
 
-                var factory = MiddlewareCompiler.Compile<ProducerContext<TNativeProperties>, Task>(methodInfo, parameters);
+                var factory = MiddlewareCompiler
+                    .Compile<ProducerContext<TKey, TMessage, TNativeProperties>, Task>(methodInfo, parameters);
                 return (context, ct) => factory(instance, context, context.ServiceProvider, ct);
+            }
+
+            // Default specific middleware
+            // e.g. class TMw { ctor(ProducerDelegate<Key, Message, Props>){} InvokeAsync(ProducerContext<Key, Message, Props> ...) }
+            if (contextParameterType == typeof(ProducerContext<TKey, TMessage, TNativeProperties>))
+            {
+                var instance = MiddlewareCompiler.CreateInstance(type, args, serviceProvider, next);
+                if (parameters.Length == 2)
+                {
+                    return methodInfo.CreateDelegate<ProducerDelegate<TKey, TMessage, TNativeProperties>>(instance).Invoke;
+                }
+
+                var factory = MiddlewareCompiler
+                    .Compile<ProducerContext<TKey, TMessage, TNativeProperties>, Task>(methodInfo, parameters);
+                return (context, ct) => factory.Invoke(instance, context, context.ServiceProvider, ct);
             }
 
             // Generic client-agnostic middleware
@@ -143,30 +208,34 @@ internal class ProducerBuilder : IProducerBuilder
                 methodInfo.GetGenericArguments().SequenceEqual(contextParameterType.GetGenericArguments()))
             {
                 var instance = MiddlewareCompiler.CreateInstance<ProducerDelegate>(type, args, serviceProvider,
-                    (context, ct) => next((ProducerContext<TNativeProperties>)context, ct));
-                if (parameters.Length == 1)
+                    (context, ct) => next((ProducerContext<TKey, TMessage, TNativeProperties>) context, ct));
+                if (parameters.Length == 2)
                 {
                     return methodInfo.CreateDelegate<ProducerDelegate<TNativeProperties>>(instance).Invoke;
                 }
 
-                var factory = MiddlewareCompiler.Compile<ProducerContext<TNativeProperties>, Task>(methodInfo, parameters);
+                var factory = MiddlewareCompiler
+                    .Compile<ProducerContext<TNativeProperties>, Task>(methodInfo, parameters);
                 return (context, ct) => factory(instance, context, context.ServiceProvider, ct);
             }
 
-            // Generic client-agnostic middleware class-based
+            // Generic message-agnostic middleware class-based
             // e.g. class TMw<TProps> { ctor(ProducerDelegate<TProps>){} { InvokeAsync(ProducerContext<TProps> ... ) }
             if (contextParameterType.GetGenericTypeDefinition() == typeof(ProducerContext<>) &&
                 type.IsGenericType &&
                 type.GetGenericArguments().SequenceEqual(contextParameterType.GetGenericArguments()))
             {
                 var genericType = type.GetGenericTypeDefinition().MakeGenericType(typeof(TNativeProperties));
-                var instance = MiddlewareCompiler.CreateInstance(genericType, args, serviceProvider, next);
-                if (parameters.Length == 1)
+                var messageAgnosticDelegate = (ProducerDelegate<TNativeProperties>) ((context, ct) =>
+                    next.Invoke((ProducerContext<TKey, TMessage, TNativeProperties>) context, ct));
+                var instance = MiddlewareCompiler.CreateInstance(genericType, args, serviceProvider, messageAgnosticDelegate);
+                if (parameters.Length == 2)
                 {
                     return methodInfo.CreateDelegate<ProducerDelegate<TNativeProperties>>(instance).Invoke;
                 }
 
-                var factory = MiddlewareCompiler.Compile<ProducerContext<TNativeProperties>, Task>(methodInfo, parameters);
+                var factory = MiddlewareCompiler
+                    .Compile<ProducerContext<TNativeProperties>, Task>(methodInfo, parameters);
                 return (context, ct) => factory(instance, context, context.ServiceProvider, ct);
             }
 
