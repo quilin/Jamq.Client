@@ -27,6 +27,8 @@
 
     <ItemGroup>
       <ProjectReference Include="..\RMQ.Client.DependencyInjection\RMQ.Client.DependencyInjection.csproj" />
+      <ProjectReference Include="..\RMQ.Client.Rabbit.DependencyInjection\RMQ.Client.Rabbit.DependencyInjection.csproj" />
+      <ProjectReference Include="..\RMQ.Client.Rabbit\RMQ.Client.Rabbit.csproj" />
     </ItemGroup>
 
 </Project>

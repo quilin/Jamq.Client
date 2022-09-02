@@ -2,9 +2,10 @@
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using RabbitMQ.Client.Events;
-using RMQ.Client.Abstractions;
 using RMQ.Client.Abstractions.Consuming;
 using RMQ.Client.Abstractions.Exceptions;
+using RMQ.Client.Rabbit.Consuming;
+using RMQ.Client.Rabbit.Producing;
 
 namespace RMQ.Client.Tests.Rabbit;
 

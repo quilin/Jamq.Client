@@ -23,5 +23,5 @@ jobs:
           VERSION="${ghref[2]}"
           VERSION=${VERSION//v}
           dotnet pack --configuration Release -p:PackageVersion=${VERSION} -o ./nupgks src
-      - name: Publish the RMQ.Client.Abstractions package to GPR
+      - name: Publish the RMQ.Client.Abstractions package to NuGet
         run: dotnet nuget push nupgks/*.nupkg --source https://api.nuget.org/v3/index.json --skip-duplicate --no-symbols --api-key ${{secrets.NUGET_API_KEY}}

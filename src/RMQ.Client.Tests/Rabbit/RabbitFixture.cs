@@ -2,10 +2,11 @@
 using Moq;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
-using RMQ.Client.Abstractions;
 using RMQ.Client.Abstractions.Consuming;
 using RMQ.Client.Abstractions.Producing;
 using RMQ.Client.DependencyInjection;
+using RMQ.Client.Rabbit;
+using RMQ.Client.Rabbit.DependencyInjection;
 
 namespace RMQ.Client.Tests.Rabbit;
 
@@ -20,7 +21,8 @@ public class RabbitFixture : IDisposable
     {
         providerFactory = new DefaultServiceProviderFactory();
         ServiceCollection = providerFactory.CreateBuilder(new ServiceCollection());
-        ServiceCollection.AddRmqClient(new RabbitConnectionParameters());
+        ServiceCollection.AddRmqClient(config => config
+            .UseRabbit(new RabbitConnectionParameters()));
 
         var connectionFactory = new Mock<IConnectionFactory>();
         var connection = new Mock<IConnection>();
