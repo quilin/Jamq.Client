@@ -3,8 +3,8 @@
         <Authors>quilin</Authors>
         <Owners>quilin</Owners>
         <PackageTags>RabbitMQ, Client</PackageTags>
-        <RepositoryUrl>https://github.com/quilin/RMQ.Client</RepositoryUrl>
-        <PackageProjectUrl>https://github.com/quilin/RMQ.Client</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/quilin/Jamq.Client</RepositoryUrl>
+        <PackageProjectUrl>https://github.com/quilin/Jamq.Client</PackageProjectUrl>
     </PropertyGroup>
 
     <ItemGroup>
