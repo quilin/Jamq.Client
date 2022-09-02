@@ -21,7 +21,7 @@ public class RabbitFixture : IDisposable
     {
         providerFactory = new DefaultServiceProviderFactory();
         ServiceCollection = providerFactory.CreateBuilder(new ServiceCollection());
-        ServiceCollection.AddRmqClient(config => config
+        ServiceCollection.AddJamqClient(config => config
             .UseRabbit(new RabbitConnectionParameters()));
 
         var connectionFactory = new Mock<IConnectionFactory>();
