@@ -104,7 +104,10 @@ internal class RabbitConsumer<TMessage, TProcessor> : IConsumer
                     await using (var scope = serviceProvider.CreateAsyncScope())
                     {
                         var context = new ConsumerContext<string, TMessage, BasicDeliverEventArgs>(
-                            scope.ServiceProvider, nativeProperties);
+                            scope.ServiceProvider, nativeProperties)
+                        {
+                            Key = nativeProperties.RoutingKey
+                        };
                         processResult = await pipeline.Invoke(context, currentCancellationTokenSource.Token);
                     }
 

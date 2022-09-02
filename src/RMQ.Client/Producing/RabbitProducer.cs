@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
-using RabbitMQ.Client;
 using RMQ.Client.Abstractions;
 using RMQ.Client.Abstractions.Producing;
 using RMQ.Client.Connection;
@@ -7,26 +6,26 @@ using RMQ.Client.Connection.Adapters;
 
 namespace RMQ.Client.Producing;
 
-internal class Producer : IProducer
+internal class RabbitProducer<TMessage> : IProducer<string, TMessage>
 {
     private readonly IChannelPool channelPool;
     private readonly IServiceProvider serviceProvider;
     private readonly RabbitProducerParameters parameters;
-    private readonly ProducerDelegate<IBasicProperties> pipeline;
+    private readonly ProducerDelegate<string, TMessage, RabbitProducerProperties> pipeline;
 
     private Lazy<IChannelAdapter> channelAccessor;
 
-    public Producer(
+    public RabbitProducer(
         IChannelPool channelPool,
         IServiceProvider serviceProvider,
         RabbitProducerParameters parameters,
-        IEnumerable<Func<ProducerDelegate<IBasicProperties>, ProducerDelegate<IBasicProperties>>> middlewares)
+        IEnumerable<Func<ProducerDelegate<string, TMessage, RabbitProducerProperties>, ProducerDelegate<string, TMessage, RabbitProducerProperties>>> middlewares)
     {
         this.channelPool = channelPool;
         this.serviceProvider = serviceProvider;
         this.parameters = parameters;
 
-        pipeline = middlewares.Reverse().Aggregate((ProducerDelegate<IBasicProperties>)SendMessage,
+        pipeline = middlewares.Reverse().Aggregate((ProducerDelegate<string, TMessage, RabbitProducerProperties>)SendMessage,
             (current, component) => component(current));
         channelAccessor = CreateChannelAccessor();
     }
@@ -57,19 +56,20 @@ internal class Producer : IProducer
         channel.Dispose();
     }
 
-    public async Task Send<TMessage>(string routingKey, TMessage message, CancellationToken cancellationToken)
+    public async Task Send(string routingKey, TMessage message, CancellationToken cancellationToken)
     {
         if (message == null) throw new ArgumentNullException(nameof(message));
 
         await using var scope = serviceProvider.CreateAsyncScope();
 
         var basicProperties = channelAccessor.Value.Channel.CreateBasicProperties();
-        var context = new ProducerContext<IBasicProperties>(
-            routingKey, message, scope.ServiceProvider, basicProperties);
+        var nativeProperties = new RabbitProducerProperties(basicProperties);
+        var context = new ProducerContext<string, TMessage, RabbitProducerProperties>(
+            scope.ServiceProvider, nativeProperties, routingKey, message);
         await pipeline.Invoke(context, cancellationToken);
     }
 
-    private Task SendMessage(ProducerContext<IBasicProperties> context, CancellationToken cancellationToken)
+    private Task SendMessage(ProducerContext<string, TMessage, RabbitProducerProperties> context, CancellationToken cancellationToken)
     {
         var channelAdapter = channelAccessor.Value;
         var channel = channelAdapter.Channel;
@@ -80,7 +80,12 @@ internal class Producer : IProducer
             channel.ConfirmSelect();
         }
 
-        channel.BasicPublish(parameters.ExchangeName, context.RoutingKey, true, context.NativeProperties, context.Body);
+        channel.BasicPublish(
+            parameters.ExchangeName,
+            context.Key,
+            true,
+            context.NativeProperties.BasicProperties,
+            context.NativeProperties.Body);
 
         if (waitForConfirms)
         {

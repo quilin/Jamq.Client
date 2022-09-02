@@ -13,12 +13,22 @@ public interface IProducerBuilder
     IProducerBuilder With(Func<ProducerDelegate, ProducerDelegate> middleware);
 
     /// <summary>
-    /// Add client-specific middleware to pipeline
+    /// Add message-agnostic middleware to pipeline
     /// </summary>
-    /// <param name="middleware"></param>
-    /// <typeparam name="TNativeProperties"></typeparam>
-    /// <returns></returns>
+    /// <param name="middleware">Middleware</param>
+    /// <typeparam name="TNativeProperties">Client-specific properties</typeparam>
+    /// <returns>Builder itself for chaining</returns>
     IProducerBuilder With<TNativeProperties>(Func<ProducerDelegate<TNativeProperties>, ProducerDelegate<TNativeProperties>> middleware);
+
+    /// <summary>
+    /// Add specific middleware to pipeline
+    /// </summary>
+    /// <param name="middleware">Middleware</param>
+    /// <typeparam name="TKey">Message key type</typeparam>
+    /// <typeparam name="TMessage">Message type</typeparam>
+    /// <typeparam name="TNativeProperties">Client-specific properties</typeparam>
+    /// <returns>Builder itself for chaining</returns>
+    IProducerBuilder With<TKey, TMessage, TNativeProperties>(Func<ProducerDelegate<TKey, TMessage, TNativeProperties>, ProducerDelegate<TKey, TMessage, TNativeProperties>> middleware);
 
     /// <summary>
     /// Add middleware of given type to the pipeline
@@ -39,5 +49,5 @@ public interface IProducerBuilder
     /// </summary>
     /// <param name="parameters">RabbitMQ producer parameters</param>
     /// <returns></returns>
-    IProducer BuildRabbit(RabbitProducerParameters parameters);
+    IProducer<string, TMessage> BuildRabbit<TMessage>(RabbitProducerParameters parameters);
 }

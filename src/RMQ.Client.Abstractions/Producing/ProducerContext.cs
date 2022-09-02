@@ -5,36 +5,43 @@
 /// </summary>
 public abstract class ProducerContext
 {
-    public string RoutingKey { get; }
-    public object Message { get; }
+    protected ProducerContext(
+        IServiceProvider serviceProvider)
+    {
+        ServiceProvider = serviceProvider;
+    }
+
     public IServiceProvider ServiceProvider { get; }
 
     public IDictionary<string, object> StoredValues { get; internal init; } = new Dictionary<string, object>();
-    
-    public byte[]? Body { get; set; }
-
-    protected ProducerContext(
-        string routingKey,
-        object message,
-        IServiceProvider serviceProvider)
-    {
-        RoutingKey = routingKey;
-        Message = message;
-        ServiceProvider = serviceProvider;
-    }
 }
 
-public class ProducerContext<TNativeProperties> : ProducerContext
+public abstract class ProducerContext<TNativeProperties> : ProducerContext
 {
-    internal ProducerContext(
-        string routingKey,
-        object message,
+    protected ProducerContext(
         IServiceProvider serviceProvider,
         TNativeProperties nativeProperties)
-        : base(routingKey, message, serviceProvider)
+        : base(serviceProvider)
     {
         NativeProperties = nativeProperties;
     }
 
     public TNativeProperties NativeProperties { get; }
+}
+
+public sealed class ProducerContext<TKey, TMessage, TNativeProperties> : ProducerContext<TNativeProperties>
+{
+    internal ProducerContext(
+        IServiceProvider serviceProvider,
+        TNativeProperties nativeProperties,
+        TKey key,
+        TMessage message) : base(serviceProvider, nativeProperties)
+    {
+        Key = key;
+        Message = message;
+    }
+
+    public TKey Key { get; }
+
+    public TMessage Message { get; }
 }
