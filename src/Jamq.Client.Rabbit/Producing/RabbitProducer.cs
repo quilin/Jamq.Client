@@ -68,7 +68,9 @@ internal class RabbitProducer<TMessage> : IProducer<string, TMessage>
         await pipeline.Invoke(context, cancellationToken);
     }
 
-    private Task SendMessage(ProducerContext<string, TMessage, RabbitProducerProperties> context, CancellationToken cancellationToken)
+    private Task SendMessage(
+        ProducerContext<string, TMessage, RabbitProducerProperties> context,
+        CancellationToken cancellationToken)
     {
         var channelAdapter = channelAccessor.Value;
         var channel = channelAdapter.Channel;

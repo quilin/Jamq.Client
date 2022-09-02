@@ -9,7 +9,7 @@
 
     <ItemGroup>
       <ProjectReference Include="..\Jamq.Client.DependencyInjection\Jamq.Client.DependencyInjection.csproj" />
-      <ProjectReference Include="..\Jamq.Client.Rabbit\Jamq.Client.Rabbit.csproj" />
+      <ProjectReference Include="..\Jamq.Client.Kafka\Jamq.Client.Kafka.csproj" />
     </ItemGroup>
 
 </Project>

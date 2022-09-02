@@ -13,10 +13,10 @@ public static class JamqClientConfigurationExtensions
         UseRabbit(configuration, _ => parameters);
 
     public static JamqClientConfiguration UseRabbit(
-        this JamqClientConfiguration builder,
+        this JamqClientConfiguration configuration,
         Func<IServiceProvider, RabbitConnectionParameters> parametersProvider)
     {
-        builder.GetServiceCollection()
+        configuration.GetServiceCollection()
             .AddSingleton(parametersProvider)
             .AddSingleton(sp => CreateConnectionFactory(parametersProvider.Invoke(sp)))
             .AddSingleton<IProducerChannelPool, ChannelPool>()
@@ -24,11 +24,11 @@ public static class JamqClientConfigurationExtensions
             .AddTransient(typeof(DefaultRabbitBodyEncodingMiddleware<>))
             .AddTransient(typeof(DefaultRabbitBodyDecodingMiddleware<>));
 
-        builder.EnrichWithClientDefaults(
+        configuration.EnrichWithClientDefaults(
             b => b.WithMiddleware(typeof(DefaultRabbitBodyEncodingMiddleware<>)),
             b => b.WithMiddleware(typeof(DefaultRabbitBodyDecodingMiddleware<>)));
 
-        return builder;
+        return configuration;
     }
 
     private static IConnectionFactory CreateConnectionFactory(RabbitConnectionParameters parameters) =>

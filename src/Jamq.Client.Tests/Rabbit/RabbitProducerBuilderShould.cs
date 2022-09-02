@@ -23,11 +23,8 @@ public class RabbitProducerBuilderShould : IClassFixture<RabbitFixture>
 
     private class InvalidConventionMiddleware_NoInvokeMethod
     {
-        private readonly ProducerDelegate next;
-
         public InvalidConventionMiddleware_NoInvokeMethod(ProducerDelegate next)
         {
-            this.next = next;
         }
 
         public Task NotInvoke(ProducerContext context, CancellationToken cancellationToken) => Task.CompletedTask;
@@ -35,11 +32,8 @@ public class RabbitProducerBuilderShould : IClassFixture<RabbitFixture>
 
     private class InvalidConventionMiddleware_AmbiguousInvokeMethods
     {
-        private readonly ProducerDelegate next;
-
         public InvalidConventionMiddleware_AmbiguousInvokeMethods(ProducerDelegate next)
         {
-            this.next = next;
         }
 
         public Task InvokeAsync(ProducerContext context, CancellationToken cancellationToken) => Task.CompletedTask;
@@ -50,11 +44,8 @@ public class RabbitProducerBuilderShould : IClassFixture<RabbitFixture>
 
     private class InvalidConventionMiddleware_MismatchParameters_Context
     {
-        private readonly ProducerDelegate next;
-
         public InvalidConventionMiddleware_MismatchParameters_Context(ProducerDelegate next)
         {
-            this.next = next;
         }
 
         public Task InvokeAsync(string context, CancellationToken cancellationToken) => Task.CompletedTask;
@@ -62,11 +53,8 @@ public class RabbitProducerBuilderShould : IClassFixture<RabbitFixture>
 
     private class InvalidConventionMiddleware_MismatchParameters_CancellationToken
     {
-        private readonly ProducerDelegate next;
-
         public InvalidConventionMiddleware_MismatchParameters_CancellationToken(ProducerDelegate next)
         {
-            this.next = next;
         }
 
         public Task InvokeAsync(ProducerContext context, string cancellationToken) => Task.CompletedTask;
@@ -74,11 +62,8 @@ public class RabbitProducerBuilderShould : IClassFixture<RabbitFixture>
 
     private class InvalidConventionMiddleware_MismatchParameters_Number
     {
-        private readonly ProducerDelegate next;
-
         public InvalidConventionMiddleware_MismatchParameters_Number(ProducerDelegate next)
         {
-            this.next = next;
         }
 
         public Task InvokeAsync() => Task.CompletedTask;
@@ -355,32 +340,4 @@ public class RabbitProducerBuilderShould : IClassFixture<RabbitFixture>
         caller.Verify(c => c.Call("GenericClientSpecificConventionalMiddleware"), Times.Once);
         caller.VerifyNoOtherCalls();
     }
-
-    // [Fact(/*Skip = "No integration tests yet"*/)]
-    // public async Task IncludeAllMatchingMiddlewares()
-    // {
-    //     fixture.CreateTopology();
-    //
-    //     var producerBuilder = fixture.GetProducerBuilder();
-    //     using var producer = producerBuilder
-    //         .WithMiddleware<ClientAgnosticConventionalMiddleware>()
-    //         .WithMiddleware<ClientSpecificConventionalMiddleware>()
-    //         .WithMiddleware<ClientSpecificWrongInterfacedMiddleware>()
-    //         .WithMiddleware(typeof(GenericClientSpecificConventionalMiddleware<>))
-    //         .WithMiddleware<GenericClientSpecificConventionalMiddleware>()
-    //         .BuildRabbit<string>(new RabbitProducerParameters("test-exchange"));
-    //     await producer.Send("whatever", "test-message", CancellationToken.None);
-    //
-    //     caller.Verify(c => c.Call("ClientAgnosticLambdaMiddleware"));
-    //     caller.Verify(c => c.Call("ClientSpecificLambdaMiddleware"));
-    //     caller.Verify(c => c.Call("ClientAgnosticInterfacedMiddleware"));
-    //     caller.Verify(c => c.Call("ClientSpecificInterfacedMiddleware"));
-    //     caller.Verify(c => c.Call("ClientAgnosticConventionalMiddleware"));
-    //     caller.Verify(c => c.Call("ClientSpecificConventionalMiddleware"));
-    //     caller.Verify(c => c.Call("GenericClientSpecificConventionalMiddleware with IBasicProperties"));
-    //     caller.Verify(c => c.Call("GenericClientSpecificConventionalMiddleware"));
-    //     caller.VerifyNoOtherCalls();
-    //
-    //     fixture.ClearTopology();
-    // }
 }

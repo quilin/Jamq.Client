@@ -16,12 +16,12 @@ jobs:
       - uses: actions/setup-dotnet@v2
         with:
           dotnet-version: '6.0.x'
-      - run: dotnet build --configuration Release src
+      - run: dotnet build --configuration Release .
       - name: Create the packages
         run: |
           ghref=(${GITHUB_REF//\// })
           VERSION="${ghref[2]}"
           VERSION=${VERSION//v}
-          dotnet pack --configuration Release -p:PackageVersion=${VERSION} -o ./nupgks src
+          dotnet pack --configuration Release -p:PackageVersion=${VERSION} -o ./nupgks .
       - name: Publish the Jamq.Client packages to NuGet
         run: dotnet nuget push nupgks/*.nupkg --source https://api.nuget.org/v3/index.json --skip-duplicate --no-symbols --api-key ${{secrets.NUGET_API_KEY}}

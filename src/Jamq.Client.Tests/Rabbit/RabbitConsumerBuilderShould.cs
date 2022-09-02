@@ -46,11 +46,8 @@ public class RabbitConsumerBuilderShould : IClassFixture<RabbitFixture>
 
     private class InvalidConventionMiddleware_NoInvokeMethod
     {
-        private readonly ConsumerDelegate next;
-
         public InvalidConventionMiddleware_NoInvokeMethod(ConsumerDelegate next)
         {
-            this.next = next;
         }
 
         public Task NotInvoke(ConsumerContext context, CancellationToken cancellationToken) => Task.CompletedTask;
@@ -58,11 +55,8 @@ public class RabbitConsumerBuilderShould : IClassFixture<RabbitFixture>
 
     private class InvalidConventionMiddleware_AmbiguousInvokeMethods
     {
-        private readonly ConsumerDelegate next;
-
         public InvalidConventionMiddleware_AmbiguousInvokeMethods(ConsumerDelegate next)
         {
-            this.next = next;
         }
 
         public Task InvokeAsync(ConsumerContext context, CancellationToken cancellationToken) => Task.CompletedTask;
@@ -73,11 +67,8 @@ public class RabbitConsumerBuilderShould : IClassFixture<RabbitFixture>
 
     private class InvalidConventionMiddleware_MismatchParameters_Context
     {
-        private readonly ConsumerDelegate next;
-
         public InvalidConventionMiddleware_MismatchParameters_Context(ConsumerDelegate next)
         {
-            this.next = next;
         }
 
         public Task InvokeAsync(string context, CancellationToken cancellationToken) => Task.CompletedTask;
@@ -85,11 +76,8 @@ public class RabbitConsumerBuilderShould : IClassFixture<RabbitFixture>
 
     private class InvalidConventionMiddleware_MismatchParameters_CancellationToken
     {
-        private readonly ConsumerDelegate next;
-
         public InvalidConventionMiddleware_MismatchParameters_CancellationToken(ConsumerDelegate next)
         {
-            this.next = next;
         }
 
         public Task InvokeAsync(ConsumerContext context, string cancellationToken) => Task.CompletedTask;
@@ -97,11 +85,8 @@ public class RabbitConsumerBuilderShould : IClassFixture<RabbitFixture>
 
     private class InvalidConventionMiddleware_MismatchParameters_Number
     {
-        private readonly ConsumerDelegate next;
-
         public InvalidConventionMiddleware_MismatchParameters_Number(ConsumerDelegate next)
         {
-            this.next = next;
         }
 
         public Task InvokeAsync() => Task.CompletedTask;

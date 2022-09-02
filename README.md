@@ -4,14 +4,14 @@ Just another message queueing client :)
 
 ## Reasoning
 
-This wrapper has been written as a high level wrapper over standard RabbitMQ.Client package. The reasoning behind it is that every time I came into a new company, same thing has to be done over and over again - add some encoding/decoding, enrich messages with OpenTelemetry (or more usual - custom Correlation token implementation), do some DI stuff etc. Same goes for using Kafka. Of course, one could use MassTransit, but it brings the terrible topology and contract conventions with it that in order to support the whole "forget about transport" mindset.
+This library has started as a high level wrapper over standard RabbitMQ.Client package. The reasoning behind it is that every time I came into a new company, same thing has to be done over and over again - add some encoding/decoding, enrich messages with OpenTelemetry (or more usual - custom Correlation token implementation), do some DI stuff etc. Same goes for using Kafka. Of course, one could use MassTransit, but it brings the terrible topology and contract conventions with it that in order to support the whole "forget about transport" mindset. In case you need something in-between the librdkafka and full-scale framework, you will find yourself in a deficite situation.
 
 ## When use it?
 
-- When you need to go with a quick start with RabbitMQ without thinking of connections, channels, robustness, encoding and decoding and etc.
-- When you need RabbitMQ library and not MessageBus framework
-- When you need easy and familiar way of managing the pipelines of producers and consumers like in usual dotnet core applications.
-- When you need to be able to unit test your RabbitMQ interaction
+- When you need to go with a quick start with RabbitMQ/Kafka without thinking of connections, channels, robustness, encoding and decoding etc
+- When you need RabbitMQ/Kafka library and not MessageBus framework
+- When you need easy and familiar way of managing the pipelines of producers and consumers like in usual dotnet core applications
+- When you need to be able to unit test your MQ interaction
 
 ## How to use it?
 
@@ -19,8 +19,8 @@ First you need to install the according packages from NuGet:
 - `Jamq.Client.Abstractions` contains all abstract contracts and interfaces to use in your code
 - `Jamq.Client` contains the implementations for the abstractions above
 - `Jamq.Client.DependencyInjection` contains basic extensions for your `IServiceCollection` for proper dependency registration
-- `Jamq.Client.Rabbit` contains the contracts and implementations to work with RabbitMQ
-- `Jamq.Client.Rabbit.DependencyInjection` contains extensions for registering the RabbitMQ implementation
+- `Jamq.Client.Rabbit` and `Jamq.Client.Rabbit.DependencyInjection` contains the contracts and implementations to register and work with RabbitMQ
+- `Jamq.Client.Kafka` and `Jamq.Client.Kafka.DependencyInjection` - same for Kafka
 
 In common architecture you would have the main endpoint project and some domain logic projects separated from each other. In this case you might want to use `Jamq.Client.Abstractions` package for your domain projects and add the `Jamq.Client` and `Jamq.Client.DependencyInjection` to the API (endpoint) project.
 
@@ -29,11 +29,34 @@ Now you can use the `ConfigureServices` method of your `Startup.cs` to register 
 ```csharp
 public void ConfigureServices(IServiceCollection services)
 {
-    services.AddJamqClient()
-        .WithRabbit(new RabbitConnectionParameters())
-        .Build();
+    services.AddJamqClient(config => config
+        .UseRabbit(new RabbitConnectionParameters()));
 }
 ```
+
+Once you registered the client, you should be able to inject `IProducerBuilder`s and `IConsumerBuilder`s in your units.
+
+### Pipelines and middlewares
+
+By default the producers and consumers are enriched with some generic encoding/decoding. Every builder instance is stateful and contains the list of registered middlewares that may add more enrichment of your design. But adding it manually to every producer/consumer builder that you have will be terrible - that is why you can register some defaults for producer/consumer builders in same `.AddJamqClient` method:
+
+```csharp
+public void ConfigureServices(IServiceCollection services)
+{
+    services.AddJamqClient(
+        config => config.UseRabbit(new RabbitConnectionParameters()),
+        producerBuilder => producerBuilder.WithMiddleware<ProducerCorrelationMiddleware>(),
+        consumerBuilder => consumerBuilder.WithMiddleware<ConsumerCorrelationMiddleware>());
+}
+```
+
+Now every `I*Builder` that you will inject in your classes will already have the predefined middlewares. Yay!
+
+Although Producers and Consumers implementations may vary, the middlewares are the high-level abstractions and may be applied to Producers and Consumers disregarding the message queue system they are based on. There are several types of middlewares you can use.
+
+
+
+## Rabbit MQ
 
 This is enough for a quickstart with connection to default `amqp://localhost:5672/` RabbitMQ endpoint as `guest:guest`. If you want to use specific endpoint, you need another constructor:
 
@@ -41,6 +64,8 @@ This is enough for a quickstart with connection to default `amqp://localhost:567
 new RabbitConnectionParameters("amqp://my-rabbit-mq-host:5673", "admin", "secret");
 ```
 
+**TODOS:**
+- Generic conventional middlewares (e.g. `class TMw<TKey> { ctor(Delegate<TKey, Message, Props> next) }` - same as interface)
 - Registration of generic scoped consumers to inject `RabbitConsumer<THandler, TMessage>` without builder (named `HttpClient`-style)
 
 ### Producer
@@ -55,7 +80,7 @@ public class InternalService
     public InternalService(IProducerBuilder producerBuilder)
     {
         var parameters = new RabbitProducerParameters("example-exchange");
-        var producer = producerBuilder.BuildRabbit(parameters);
+        var producer = producerBuilder.BuildRabbit<DomainModel>(parameters);
     }
 
     public async Task DoIt(CancellationToken cancellationToken)
@@ -156,9 +181,9 @@ If you don't want to bother flushing and adding middlewares each time you create
 ```csharp
 public void ConfigureServices(IServiceCollection services)
 {
-    services.AddJamqClient()
-        .WithRabbit(new RabbitConnectionParameters())
-        .Build(producerBuilder => producerBuilder.Flush()
+    services.AddJamqClient(
+        config => config.UseRabbit(new RabbitConnectionParameters()),
+        producerBuilder => producerBuilder.Flush()
             .WithMiddleware<CustomEncodingMiddleware>()
             .WithMiddleware<CustomConventionalMiddleware>());
 }
@@ -170,7 +195,7 @@ Now every time you inject the `IProducerBuilder` it will come from this enrichme
 
 By default, all producer middlewares are client agnostic, which means But what if you want to interact with the underlying client directly from the middleware? For example to put the correlation token into the message headers. In this case you might want to create the client-aware middleware:
 ```csharp
-public class CorrelationEnrichmentMiddleware : IProducerMiddleware<IBasicProperties>
+public class CorrelationEnrichmentMiddleware : IProducerMiddleware<RabbitProducerProperties>
 {
     private readonly ICorrelationTokenProvider correlationTokenProvider;
 
@@ -180,11 +205,11 @@ public class CorrelationEnrichmentMiddleware : IProducerMiddleware<IBasicPropert
     }
     
     public async Task InvokeAsync(
-        ProducerContext<IBasicProperties> context,
-        ProducerDelegate<IBasicProperties> next,
+        ProducerContext<RabbitProducerProperties> context,
+        ProducerDelegate<RabbitProducerProperties> next,
         CancellationToken token)
     {
-        context.NativeProperties.CorrelationId = correlationTokenProvider.Current;
+        context.NativeProperties.BasicProperties.CorrelationId = correlationTokenProvider.Current;
         await next(context, token);
     }
 }
@@ -229,19 +254,21 @@ Open generic types will be automatically instantiated with certain `TNativePrope
 ### Consumer
 
 Consumers are stateful components that are responsible for receiving and processing incoming messages. "Stateful" means just two states:
- - Listening
- - Not listening
+- Listening
+- Not listening
 
 In order to create the consumer, you need to inject the `IConsumerBuilder`:
 
 ```csharp
 public InternalService(IConsumerBuilder consumerBuilder)
 {
-    var consumer = consumerBuilder.BuildRabbit<Processor, Message>(
+    var consumer = consumerBuilder.BuildRabbit<Message, Processor>(
         new RabbitConsumerParameters("ConsumerTag", "exchange-name", ProcessingOrder.Sequential));
     consumer.Subscribe();
 }
 ```
+
+The processing order parameter not only affects how the consumer will work, but also how the RabbitMQ broker will interact with it (via QoS). By default the consumer uses `ProcessingOrder.Unmanaged` which means that however the queue or broker is set up. In case you want to customize it, there are two ways: `ProcessingOrder.Sequential` and `ProcessingOrder.Parallel.WithMaximumDegree(myNumber)`. The parallelism limitation are not being controlled by the library, but instead by the same QoS policies of the broker. You can (and should) read more about it in the
 
 Notice that in order to create a rabbit consumer you are supposed to declare two types: the message and processor. Message has no constraints, it can be anything, but the processor needs to implement the `IProcessor` interface:
 

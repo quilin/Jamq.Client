@@ -29,6 +29,7 @@
 
     <ItemGroup>
       <ProjectReference Include="..\Jamq.Client.DependencyInjection\Jamq.Client.DependencyInjection.csproj" />
+      <ProjectReference Include="..\Jamq.Client.Kafka.DependencyInjection\Jamq.Client.Kafka.DependencyInjection.csproj" />
       <ProjectReference Include="..\Jamq.Client.Rabbit.DependencyInjection\Jamq.Client.Rabbit.DependencyInjection.csproj" />
       <ProjectReference Include="..\Jamq.Client.Rabbit\Jamq.Client.Rabbit.csproj" />
     </ItemGroup>
