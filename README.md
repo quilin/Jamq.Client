@@ -7,15 +7,18 @@ This wrapper has been written as a high level wrapper over standard RabbitMQ.Cli
 ## When use it?
 
 - When you need to go with a quick start with RabbitMQ without thinking of connections, channels, robustness, encoding and decoding and etc.
+- When you need RabbitMQ library and not MessageBus framework
 - When you need easy and familiar way of managing the pipelines of producers and consumers like in usual dotnet core applications.
 - When you need to be able to unit test your RabbitMQ interaction
 
 ## How to use it?
 
 First you need to install the according packages from NuGet:
-- `RMQ.Client.Abstractions` contains all needed contracts and interfaces to use in your code
-- `RMQ.Client.DependencyInjection` contains all needed extensions for your `IServiceCollection` for proper dependency registration
-- `RMQ.Client` is the implementation package and it is required for the code to work in your project.
+- `RMQ.Client.Abstractions` contains all abstract contracts and interfaces to use in your code
+- `RMQ.Client` contains the implementations for the abstractions above
+- `RMQ.Client.DependencyInjection` contains basic extensions for your `IServiceCollection` for proper dependency registration
+- `RMQ.Client.Rabbit` contains the contracts and implementations to work with RabbitMQ
+- `RMQ.Client.Rabbit.DependencyInjection` contains extensions for registering the RabbitMQ implementation
 
 In common architecture you would have the main endpoint project and some domain logic projects separated from each other. In this case you might want to use `RMQ.Client.Abstractions` package for your domain projects and add the `RMQ.Client` and `RMQ.Client.DependencyInjection` to the API (endpoint) project.
 
@@ -24,7 +27,9 @@ Now you can use the `ConfigureServices` method of your `Startup.cs` to register 
 ```csharp
 public void ConfigureServices(IServiceCollection services)
 {
-    services.AddRmqClient(new RabbitConnectionParameters());
+    services.AddRmqClient()
+        .WithRabbit(new RabbitConnectionParameters())
+        .Build();
 }
 ```
 
@@ -34,9 +39,7 @@ This is enough for a quickstart with connection to default `amqp://localhost:567
 new RabbitConnectionParameters("amqp://my-rabbit-mq-host:5673", "admin", "secret");
 ```
 
-#### TODOS
-- `IOptions<RabbitConnectionParameters>` for dynamic configuration registration
-- Registration of generic scoped consumers to inject `RabbitConsumer<THandler, TMessage>` without builder
+- Registration of generic scoped consumers to inject `RabbitConsumer<THandler, TMessage>` without builder (named `HttpClient`-style)
 
 ### Producer
 
@@ -151,9 +154,9 @@ If you don't want to bother flushing and adding middlewares each time you create
 ```csharp
 public void ConfigureServices(IServiceCollection services)
 {
-    services.AddRmqClient(
-        new RabbitConnectionParameters(),
-        producerBuilder => producerBuilder.Flush()
+    services.AddRmqClient()
+        .WithRabbit(new RabbitConnectionParameters())
+        .Build(producerBuilder => producerBuilder.Flush()
             .WithMiddleware<CustomEncodingMiddleware>()
             .WithMiddleware<CustomConventionalMiddleware>());
 }
@@ -400,5 +403,3 @@ public ConsumerService : BackgroundService
 }
 ```
 
-#### TODOs
-1. Generic producer context to contain the typed message

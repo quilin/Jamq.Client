@@ -1,11 +1,7 @@
 ﻿using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using RabbitMQ.Client.Events;
-using RMQ.Client.Abstractions;
 using RMQ.Client.Abstractions.Consuming;
 using RMQ.Client.Abstractions.Exceptions;
-using RMQ.Client.Connection;
 
 namespace RMQ.Client.Consuming;
 
@@ -52,16 +48,11 @@ internal class ConsumerBuilder : IConsumerBuilder
         return this;
     }
 
-    public IConsumer BuildRabbit<TMessage, TProcessor>(RabbitConsumerParameters parameters)
-        where TProcessor : IProcessor<string, TMessage>
-    {
-        var components = middlewares.Select(ToPipelineStep<string, TMessage, BasicDeliverEventArgs>).ToArray();
+    IServiceProvider IConsumerBuilder.GetServiceProvider() => serviceProvider;
 
-        var channelPool = serviceProvider.GetRequiredService<IConsumerChannelPool>();
-        var logger = serviceProvider.GetService<ILogger<RabbitConsumer<TMessage, TProcessor>>>();
-
-        return new RabbitConsumer<TMessage, TProcessor>(channelPool, serviceProvider, parameters, logger, components);
-    }
+    IEnumerable<Func<ConsumerDelegate<TKey, TMessage, TProperties>, ConsumerDelegate<TKey, TMessage, TProperties>>>
+        IConsumerBuilder.GetMiddlewares<TKey, TMessage, TProperties>() =>
+        middlewares.Select(ToPipelineStep<TKey, TMessage, TProperties>);
 
     private Func<ConsumerDelegate<TKey, TMessage, TNativeProperties>,
             ConsumerDelegate<TKey, TMessage, TNativeProperties>>
@@ -75,8 +66,8 @@ internal class ConsumerBuilder : IConsumerBuilder
         Func<ConsumerDelegate<TNativeProperties>, ConsumerDelegate<TNativeProperties>> messageAgnosticMiddleware =>
             next => (context, ct) =>
             {
-                var messageAgnosticDelegate = (ConsumerDelegate<TNativeProperties>) ((messageAgnosticContext, token) =>
-                    next.Invoke((ConsumerContext<TKey, TMessage, TNativeProperties>) messageAgnosticContext, token));
+                var messageAgnosticDelegate = (ConsumerDelegate<TNativeProperties>)((messageAgnosticContext, token) =>
+                    next.Invoke((ConsumerContext<TKey, TMessage, TNativeProperties>)messageAgnosticContext, token));
                 var resultingDelegate = messageAgnosticMiddleware.Invoke(messageAgnosticDelegate);
                 return resultingDelegate.Invoke(context, ct);
             },
@@ -84,8 +75,8 @@ internal class ConsumerBuilder : IConsumerBuilder
         // Lambda client-agnostic middleware
         Func<ConsumerDelegate, ConsumerDelegate> clientAgnosticMiddleware => next => (context, ct) =>
         {
-            var clientAgnosticDelegate = (ConsumerDelegate) ((clientAgnosticContext, token) =>
-                next.Invoke((ConsumerContext<TKey, TMessage, TNativeProperties>) clientAgnosticContext, token));
+            var clientAgnosticDelegate = (ConsumerDelegate)((clientAgnosticContext, token) =>
+                next.Invoke((ConsumerContext<TKey, TMessage, TNativeProperties>)clientAgnosticContext, token));
             var resultingDelegate = clientAgnosticMiddleware.Invoke(clientAgnosticDelegate);
             return resultingDelegate.Invoke(context, ct);
         },
@@ -94,7 +85,7 @@ internal class ConsumerBuilder : IConsumerBuilder
         (Type type, object[]) when typeof(IConsumerMiddleware<TKey, TMessage, TNativeProperties>).GetTypeInfo()
             .IsAssignableFrom(type.GetTypeInfo()) => next => (context, ct) =>
         {
-            var middleware = (IConsumerMiddleware<TKey, TMessage, TNativeProperties>) context.ServiceProvider
+            var middleware = (IConsumerMiddleware<TKey, TMessage, TNativeProperties>)context.ServiceProvider
                 .GetRequiredService(type);
             return middleware.InvokeAsync(context, next, ct);
         },
@@ -107,12 +98,12 @@ internal class ConsumerBuilder : IConsumerBuilder
         // class Mw<TMessage> : IConsumerMiddleware<string, TMessage, Props>
         // class Mw<TProps, TMessage> : IConsumerMiddleware<long, TMessage, TProps> - the arguments are mixed, but it doesn't matter!
         // class Mw<TProps, TKey, TMessage> : IConsumerMiddleware<TKey, TMessage, TProps> - event that crazy stuff works
-        (Type {IsGenericType: true} type, object[]) when
+        (Type { IsGenericType: true } type, object[]) when
             MiddlewareCompiler.TryMatchGenericInterface<IConsumerMiddleware<TKey, TMessage, TNativeProperties>>(type) is
-                {Success: true, GenericType: var genericType} =>
+                { Success: true, GenericType: var genericType } =>
             next => (context, ct) =>
             {
-                var middleware = (IConsumerMiddleware<TKey, TMessage, TNativeProperties>) context.ServiceProvider
+                var middleware = (IConsumerMiddleware<TKey, TMessage, TNativeProperties>)context.ServiceProvider
                     .GetRequiredService(genericType);
                 return middleware.InvokeAsync(context, next, ct);
             },
@@ -121,9 +112,9 @@ internal class ConsumerBuilder : IConsumerBuilder
         (Type type, object[]) when typeof(IConsumerMiddleware<TNativeProperties>).GetTypeInfo()
             .IsAssignableFrom(type.GetTypeInfo()) => next => (context, ct) =>
         {
-            var middleware = (IConsumerMiddleware<TNativeProperties>) context.ServiceProvider.GetRequiredService(type);
-            var messageAgnosticDelegate = (ConsumerDelegate<TNativeProperties>) ((messageAgnosticContext, token) =>
-                next.Invoke((ConsumerContext<TKey, TMessage, TNativeProperties>) messageAgnosticContext, token));
+            var middleware = (IConsumerMiddleware<TNativeProperties>)context.ServiceProvider.GetRequiredService(type);
+            var messageAgnosticDelegate = (ConsumerDelegate<TNativeProperties>)((messageAgnosticContext, token) =>
+                next.Invoke((ConsumerContext<TKey, TMessage, TNativeProperties>)messageAgnosticContext, token));
             return middleware.InvokeAsync(context, messageAgnosticDelegate, ct);
         },
 
@@ -131,9 +122,9 @@ internal class ConsumerBuilder : IConsumerBuilder
         (Type type, object[]) when typeof(IConsumerMiddleware).GetTypeInfo()
             .IsAssignableFrom(type.GetTypeInfo()) => next => (context, ct) =>
         {
-            var middleware = (IConsumerMiddleware) context.ServiceProvider.GetRequiredService(type);
-            var clientAgnosticDelegate = (ConsumerDelegate) ((clientAgnosticContext, token) =>
-                next.Invoke((ConsumerContext<TKey, TMessage, TNativeProperties>) clientAgnosticContext, token));
+            var middleware = (IConsumerMiddleware)context.ServiceProvider.GetRequiredService(type);
+            var clientAgnosticDelegate = (ConsumerDelegate)((clientAgnosticContext, token) =>
+                next.Invoke((ConsumerContext<TKey, TMessage, TNativeProperties>)clientAgnosticContext, token));
             return middleware.InvokeAsync(context, clientAgnosticDelegate, ct);
         },
 
@@ -143,7 +134,7 @@ internal class ConsumerBuilder : IConsumerBuilder
             var methodInfos = type.GetMethods(BindingFlags.Instance | BindingFlags.Public)
                 .Where(mi => mi.Name == nameof(IConsumerMiddleware.InvokeAsync))
                 .ToArray();
-            var methodInfo = (uint) methodInfos.Length switch
+            var methodInfo = (uint)methodInfos.Length switch
             {
                 1 => methodInfos[0],
                 0 => throw ConsumerBuilderMiddlewareConventionException.NoInvokeAsyncMethod(type),
@@ -165,14 +156,15 @@ internal class ConsumerBuilder : IConsumerBuilder
             if (contextParameterType == typeof(ConsumerContext))
             {
                 var instance = MiddlewareCompiler.CreateInstance<ConsumerDelegate>(type, args, serviceProvider,
-                    (context, ct) => next.Invoke((ConsumerContext<TKey, TMessage, TNativeProperties>) context, ct));
+                    (context, ct) => next.Invoke((ConsumerContext<TKey, TMessage, TNativeProperties>)context, ct));
                 if (parameters.Length == 2)
                 {
                     return methodInfo.CreateDelegate<ConsumerDelegate>(instance).Invoke;
                 }
 
                 var factory = MiddlewareCompiler
-                    .Compile<ConsumerContext<TKey, TMessage, TNativeProperties>, Task<ProcessResult>>(methodInfo, parameters);
+                    .Compile<ConsumerContext<TKey, TMessage, TNativeProperties>, Task<ProcessResult>>(methodInfo,
+                        parameters);
                 return (context, ct) => factory.Invoke(instance, context, context.ServiceProvider, ct);
             }
 
@@ -180,15 +172,17 @@ internal class ConsumerBuilder : IConsumerBuilder
             // e.g. class TMw { ctor(ConsumerDelegate<Props>){} InvokeAsync(ConsumerContext<Props> ...)
             if (contextParameterType == typeof(ConsumerContext<TNativeProperties>))
             {
-                var instance = MiddlewareCompiler.CreateInstance<ConsumerDelegate<TNativeProperties>>(type, args, serviceProvider,
-                    (context, ct) => next.Invoke((ConsumerContext<TKey, TMessage, TNativeProperties>) context, ct));
+                var instance = MiddlewareCompiler.CreateInstance<ConsumerDelegate<TNativeProperties>>(type, args,
+                    serviceProvider,
+                    (context, ct) => next.Invoke((ConsumerContext<TKey, TMessage, TNativeProperties>)context, ct));
                 if (parameters.Length == 2)
                 {
                     return methodInfo.CreateDelegate<ConsumerDelegate<TNativeProperties>>(instance).Invoke;
                 }
 
                 var factory = MiddlewareCompiler
-                    .Compile<ConsumerContext<TKey, TMessage, TNativeProperties>, Task<ProcessResult>>(methodInfo, parameters);
+                    .Compile<ConsumerContext<TKey, TMessage, TNativeProperties>, Task<ProcessResult>>(methodInfo,
+                        parameters);
                 return (context, ct) => factory.Invoke(instance, context, context.ServiceProvider, ct);
             }
 
@@ -199,11 +193,13 @@ internal class ConsumerBuilder : IConsumerBuilder
                 var instance = MiddlewareCompiler.CreateInstance(type, args, serviceProvider, next);
                 if (parameters.Length == 2)
                 {
-                    return methodInfo.CreateDelegate<ConsumerDelegate<TKey, TMessage, TNativeProperties>>(instance).Invoke;
+                    return methodInfo.CreateDelegate<ConsumerDelegate<TKey, TMessage, TNativeProperties>>(instance)
+                        .Invoke;
                 }
 
                 var factory = MiddlewareCompiler
-                    .Compile<ConsumerContext<TKey, TMessage, TNativeProperties>, Task<ProcessResult>>(methodInfo, parameters);
+                    .Compile<ConsumerContext<TKey, TMessage, TNativeProperties>, Task<ProcessResult>>(methodInfo,
+                        parameters);
                 return (context, ct) => factory.Invoke(instance, context, context.ServiceProvider, ct);
             }
 
@@ -214,14 +210,16 @@ internal class ConsumerBuilder : IConsumerBuilder
                 methodInfo.GetGenericArguments().SequenceEqual(contextParameterType.GetGenericArguments()))
             {
                 var instance = MiddlewareCompiler.CreateInstance<ConsumerDelegate>(type, args, serviceProvider,
-                    (context, ct) => next.Invoke((ConsumerContext<TKey, TMessage, TNativeProperties>) context, ct));
+                    (context, ct) => next.Invoke((ConsumerContext<TKey, TMessage, TNativeProperties>)context, ct));
                 if (parameters.Length == 2)
                 {
-                    return methodInfo.CreateDelegate<ConsumerDelegate<TKey, TMessage, TNativeProperties>>(instance).Invoke;
+                    return methodInfo.CreateDelegate<ConsumerDelegate<TKey, TMessage, TNativeProperties>>(instance)
+                        .Invoke;
                 }
 
                 var factory = MiddlewareCompiler
-                    .Compile<ConsumerContext<TKey, TMessage, TNativeProperties>, Task<ProcessResult>>(methodInfo, parameters);
+                    .Compile<ConsumerContext<TKey, TMessage, TNativeProperties>, Task<ProcessResult>>(methodInfo,
+                        parameters);
                 return (context, ct) => factory.Invoke(instance, context, context.ServiceProvider, ct);
             }
 
@@ -241,7 +239,8 @@ internal class ConsumerBuilder : IConsumerBuilder
                 }
 
                 var factory = MiddlewareCompiler
-                    .Compile<ConsumerContext<TKey, TMessage, TNativeProperties>, Task<ProcessResult>>(methodInfo, parameters);
+                    .Compile<ConsumerContext<TKey, TMessage, TNativeProperties>, Task<ProcessResult>>(methodInfo,
+                        parameters);
                 return (context, ct) => factory.Invoke(instance, context, context.ServiceProvider, ct);
             }
 

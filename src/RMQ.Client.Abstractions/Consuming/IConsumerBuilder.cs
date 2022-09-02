@@ -47,12 +47,17 @@ public interface IConsumerBuilder
     IConsumerBuilder Flush();
 
     /// <summary>
-    /// Build consumer for RabbitMQ
+    /// Extract builder service provider
     /// </summary>
-    /// <param name="parameters">RabbitMQ consumer parameters</param>
-    /// <typeparam name="TMessage">Message type</typeparam>
-    /// <typeparam name="TProcessor">Message processor type</typeparam>
-    /// <returns>Consumer</returns>
-    IConsumer BuildRabbit<TMessage, TProcessor>(RabbitConsumerParameters parameters)
-        where TProcessor : IProcessor<string, TMessage>;
+    /// <returns></returns>
+    internal IServiceProvider GetServiceProvider();
+
+    /// <summary>
+    /// Extract matching registered middlewares to create pipeline for certain consumer
+    /// </summary>
+    /// <typeparam name="TKey">Message key</typeparam>
+    /// <typeparam name="TMessage">Message</typeparam>
+    /// <typeparam name="TProperties">Native properties</typeparam>
+    /// <returns>Middleware sequence</returns>
+    internal IEnumerable<Func<ConsumerDelegate<TKey, TMessage, TProperties>, ConsumerDelegate<TKey, TMessage, TProperties>>> GetMiddlewares<TKey, TMessage, TProperties>();
 }

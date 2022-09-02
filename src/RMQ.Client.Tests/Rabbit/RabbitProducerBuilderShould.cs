@@ -1,9 +1,9 @@
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
-using RMQ.Client.Abstractions;
 using RMQ.Client.Abstractions.Exceptions;
 using RMQ.Client.Abstractions.Producing;
+using RMQ.Client.Rabbit.Producing;
 
 namespace RMQ.Client.Tests.Rabbit;
 

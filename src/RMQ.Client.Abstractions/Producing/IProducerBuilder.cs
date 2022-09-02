@@ -45,9 +45,17 @@ public interface IProducerBuilder
     IProducerBuilder Flush();
 
     /// <summary>
-    /// Build producer for RabbitMQ
+    /// Extract builder service provider
     /// </summary>
-    /// <param name="parameters">RabbitMQ producer parameters</param>
     /// <returns></returns>
-    IProducer<string, TMessage> BuildRabbit<TMessage>(RabbitProducerParameters parameters);
+    internal IServiceProvider GetServiceProvider();
+
+    /// <summary>
+    /// Extract matching registered middlewares to create pipeline for certain producer
+    /// </summary>
+    /// <typeparam name="TKey">Message key</typeparam>
+    /// <typeparam name="TMessage">Message</typeparam>
+    /// <typeparam name="TProperties">Native properties</typeparam>
+    /// <returns>Middleware sequence</returns>
+    internal IEnumerable<Func<ProducerDelegate<TKey, TMessage, TProperties>, ProducerDelegate<TKey, TMessage, TProperties>>> GetMiddlewares<TKey, TMessage, TProperties>();
 }
