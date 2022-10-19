@@ -330,22 +330,24 @@ In other cases you still don't care about the message type, but it is essential 
 ```csharp
 public class ConsumerOpenTelemetryMiddleware
 {
-    private readonly ConsumerDelegate<BasicDeliverEventArgs> next;
+    private readonly ConsumerDelegate<RabbitConsumerProperties> next;
 
-    public ConsumerOpenTelemetryMiddleware(ConsumerDelegate<BasicDeliverEventArgs> next)
+    public ConsumerOpenTelemetryMiddleware(ConsumerDelegate<RabbitConsumerProperties> next)
     {
         this.next = next;
     }
 
     public async Task<ProcessResult> InvokeNext(
-        ConsumerContext<BasicDeliverEventArgs> context,
+        ConsumerContext<RabbitConsumerProperties> context,
         CancellationToken token)
     {
         var parentContext = Propagator.Extract(
-            default, context.NativeProperties.BasicProperties, ExtractTraceContext);
+            default,
+            context.NativeProperties.BasicDeliverEventArgs.BasicProperties,
+            ExtractTraceContext);
         Baggage.Current = parentContext.Baggage;
 
-        var activityName = $"{context.NativeProperties.ConsumerTag} incoming message";
+        var activityName = $"{context.NativeProperties.BasicDeliverEventArgs.ConsumerTag} incoming message";
         using var activity = ActivitySource.StartActivity(
             activityName,
             ActivityKind.Consumer,
@@ -367,14 +369,15 @@ A lot of stuff going on here, and the source code is based on the public example
 Another common scenario - is middleware that is aware of the client, but needs to be generic of the message type. Usually you will need that to implement your own decoding middleware:
 
 ```csharp
-public class NewtonsoftJsonDecodingMiddleware<TMessage> : IConsumerMiddleware<BasicDeliverEventArgs, TMessage>
+public class NewtonsoftJsonDecodingMiddleware<TMessage> : IConsumerMiddleware<RabbitConsumerProperties, TMessage>
 {
     public Task<ProcessResult> InvokeAsync(
-        ConsumerContext<BasicDeliverEventArgs, TMessage> context,
-        ConsumerDelegate<BasicDeliverEventArgs, TMessage> next,
+        ConsumerContext<RabbitConsumerProperties, TMessage> context,
+        ConsumerDelegate<RabbitConsumerProperties, TMessage> next,
         CancellationToken token)
     {
-        var utf8Body = Encoding.UTF8.GetString(context.NativeProperties.Body.ToArray());
+        var body = context.NativeProperties.BasicDeliverEventArgs.Body.ToArray();
+        var utf8Body = Encoding.UTF8.GetString(body);
         var message = JsonConvert.DeserializeObject<TMessage>(utf8Body);
         context.Message = message;
         return next.Invoke(context, token);
@@ -422,7 +425,7 @@ public ConsumerService : BackgroundService
     public ConsumerService(IConsumerBuilder builder) { this.builder = builder; }
 
     public override async ExecuteAsync(CancellationToken token) => builder
-        .With<BasicDeliverEventArgs, string>(next => (context, ct) => {
+        .With<RabbitConsumerProperties, string>(next => (context, ct) => {
             var logger = context.ServiceProvider.GetRequiredService<ILogger<ConsumerService>>();
             logger.LogInformation("Here goes the string message: {Message}", context.Message);
             return next.Invoke(context, ct);

@@ -15,7 +15,7 @@ internal class RabbitConsumer<TMessage, TProcessor> : IConsumer
     private readonly ILogger? logger;
     private readonly IChannelPool channelPool;
     private readonly IServiceProvider serviceProvider;
-    private readonly ConsumerDelegate<string, TMessage, BasicDeliverEventArgs> pipeline;
+    private readonly ConsumerDelegate<string, TMessage, RabbitConsumerProperties> pipeline;
 
     private readonly object sync = new();
 
@@ -31,7 +31,7 @@ internal class RabbitConsumer<TMessage, TProcessor> : IConsumer
         IServiceProvider serviceProvider,
         RabbitConsumerParameters parameters,
         ILogger? logger,
-        IEnumerable<Func<ConsumerDelegate<string, TMessage, BasicDeliverEventArgs>, ConsumerDelegate<string, TMessage, BasicDeliverEventArgs>>> middlewares)
+        IEnumerable<Func<ConsumerDelegate<string, TMessage, RabbitConsumerProperties>, ConsumerDelegate<string, TMessage, RabbitConsumerProperties>>> middlewares)
     {
         this.channelPool = channelPool;
         this.serviceProvider = serviceProvider;
@@ -39,11 +39,11 @@ internal class RabbitConsumer<TMessage, TProcessor> : IConsumer
         this.logger = logger;
 
         pipeline = middlewares.Reverse().Aggregate(
-            (ConsumerDelegate<string, TMessage, BasicDeliverEventArgs>)((context, cancellationToken) =>
+            (ConsumerDelegate<string, TMessage, RabbitConsumerProperties>)((context, cancellationToken) =>
             {
                 var processor = context.ServiceProvider.GetRequiredService<TProcessor>();
                 return processor.Process(
-                    context.Key ?? context.NativeProperties.RoutingKey,
+                    context.Key ?? context.NativeProperties.BasicDeliverEventArgs.RoutingKey,
                     context.Message!,
                     cancellationToken);
             }),
@@ -102,8 +102,9 @@ internal class RabbitConsumer<TMessage, TProcessor> : IConsumer
                     ProcessResult processResult;
                     await using (var scope = serviceProvider.CreateAsyncScope())
                     {
-                        var context = new ConsumerContext<string, TMessage, BasicDeliverEventArgs>(
-                            scope.ServiceProvider, nativeProperties)
+                        var consumerProperties = new RabbitConsumerProperties(nativeProperties, parameters);
+                        var context = new ConsumerContext<string, TMessage, RabbitConsumerProperties>(
+                            scope.ServiceProvider, consumerProperties)
                         {
                             Key = nativeProperties.RoutingKey
                         };

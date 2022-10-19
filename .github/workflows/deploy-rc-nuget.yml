@@ -1,0 +1,29 @@
+name: Publish RC nuget package
+
+on:
+  release:
+    types: [ created ]
+
+jobs:
+  deploy-rc:
+    if: ${{ github.event.issue.pull_request }}
+
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-dotnet@v2
+        with:
+          dotnet-version: '6.0.x'
+      - run: dotnet build --configuration Release .
+      - name: Create the packages
+        run: |
+          ghref=(${GITHUB_REF//\// })
+          VERSION="${ghref[2]}"
+          VERSION=${VERSION//v}
+          dotnet pack --configuration Release -p:PackageVersion=${VERSION}-rc -o ./nupgks .
+          echo ${VERSION}
+      # - name: Publish the Jamq.Client packages to NuGet
+      #   run: dotnet nuget push nupgks/*.nupkg --source https://api.nuget.org/v3/index.json --skip-duplicate --no-symbols --api-key ${{secrets.NUGET_API_KEY}}
