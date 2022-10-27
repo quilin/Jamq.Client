@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using Jamq.Client.Abstractions.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
 using RabbitMQ.Client;
 using Jamq.Client.DependencyInjection;
 using Jamq.Client.Rabbit.Connection;
@@ -44,8 +45,8 @@ public static class JamqClientConfigurationExtensions
             {
                 ["platform"] = ".NET",
                 ["platform-version"] = Environment.Version.ToString(),
-                ["product"] = "Jamq.Client",
-                ["version"] = "0.5.3"
+                ["product"] = Event.SourceName,
+                ["version"] = Event.VersionName
             }
         };
 }

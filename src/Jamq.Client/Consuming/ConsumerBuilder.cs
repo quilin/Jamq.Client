@@ -165,7 +165,7 @@ internal class ConsumerBuilder : IConsumerBuilder
                 var factory = MiddlewareCompiler
                     .Compile<ConsumerContext<TKey, TMessage, TNativeProperties>, Task<ProcessResult>>(methodInfo,
                         parameters);
-                return (context, ct) => factory.Invoke(instance, context, context.ServiceProvider, ct);
+                return async (context, ct) => await factory.Invoke(instance, context, context.ServiceProvider, ct).ConfigureAwait(false);
             }
 
             // Default message-agnostic middleware
@@ -183,7 +183,7 @@ internal class ConsumerBuilder : IConsumerBuilder
                 var factory = MiddlewareCompiler
                     .Compile<ConsumerContext<TKey, TMessage, TNativeProperties>, Task<ProcessResult>>(methodInfo,
                         parameters);
-                return (context, ct) => factory.Invoke(instance, context, context.ServiceProvider, ct);
+                return async (context, ct) => await factory.Invoke(instance, context, context.ServiceProvider, ct).ConfigureAwait(false);
             }
 
             // Default specific middleware
@@ -200,7 +200,7 @@ internal class ConsumerBuilder : IConsumerBuilder
                 var factory = MiddlewareCompiler
                     .Compile<ConsumerContext<TKey, TMessage, TNativeProperties>, Task<ProcessResult>>(methodInfo,
                         parameters);
-                return (context, ct) => factory.Invoke(instance, context, context.ServiceProvider, ct);
+                return async (context, ct) => await factory.Invoke(instance, context, context.ServiceProvider, ct).ConfigureAwait(false);
             }
 
             // Generic client-agnostic middleware
@@ -220,7 +220,7 @@ internal class ConsumerBuilder : IConsumerBuilder
                 var factory = MiddlewareCompiler
                     .Compile<ConsumerContext<TKey, TMessage, TNativeProperties>, Task<ProcessResult>>(methodInfo,
                         parameters);
-                return (context, ct) => factory.Invoke(instance, context, context.ServiceProvider, ct);
+                return async (context, ct) => await factory.Invoke(instance, context, context.ServiceProvider, ct).ConfigureAwait(false);
             }
 
             // Generic client-agnostic middleware class-based
@@ -241,7 +241,7 @@ internal class ConsumerBuilder : IConsumerBuilder
                 var factory = MiddlewareCompiler
                     .Compile<ConsumerContext<TKey, TMessage, TNativeProperties>, Task<ProcessResult>>(methodInfo,
                         parameters);
-                return (context, ct) => factory.Invoke(instance, context, context.ServiceProvider, ct);
+                return async (context, ct) => await factory.Invoke(instance, context, context.ServiceProvider, ct).ConfigureAwait(false);
             }
 
             // if we cannot recognise the middleware, we simply skip it

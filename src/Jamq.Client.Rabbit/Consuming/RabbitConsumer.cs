@@ -108,7 +108,7 @@ internal class RabbitConsumer<TMessage, TProcessor> : IConsumer
                         {
                             Key = basicDeliverEventArgs.RoutingKey
                         };
-                        processResult = await pipeline.Invoke(context, currentCancellationTokenSource.Token);
+                        processResult = await pipeline.Invoke(context, currentCancellationTokenSource.Token).ConfigureAwait(false);
                     }
 
                     switch (processResult)
@@ -208,7 +208,7 @@ internal class RabbitConsumer<TMessage, TProcessor> : IConsumer
             }
 
             var consumer = connectionAccessor.Value.Consumer;
-            Task.Run(async () => await consumer.OnCancel()).GetAwaiter().GetResult();
+            Task.Run(async () => await consumer.OnCancel()).ConfigureAwait(false).GetAwaiter().GetResult();
             countdownEvent!.Signal();
             cancellationTokenSource!.Cancel();
 

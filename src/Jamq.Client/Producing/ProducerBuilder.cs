@@ -165,7 +165,7 @@ internal class ProducerBuilder : IProducerBuilder
 
                 var factory = MiddlewareCompiler
                     .Compile<ProducerContext<TKey, TMessage, TNativeProperties>, Task>(methodInfo, parameters);
-                return (context, ct) => factory(instance, context, context.ServiceProvider, ct);
+                return async (context, ct) => await factory(instance, context, context.ServiceProvider, ct).ConfigureAwait(false);
             }
 
             // Default message-agnostic middleware
@@ -182,7 +182,7 @@ internal class ProducerBuilder : IProducerBuilder
 
                 var factory = MiddlewareCompiler
                     .Compile<ProducerContext<TKey, TMessage, TNativeProperties>, Task>(methodInfo, parameters);
-                return (context, ct) => factory(instance, context, context.ServiceProvider, ct);
+                return async (context, ct) => await factory(instance, context, context.ServiceProvider, ct).ConfigureAwait(false);
             }
 
             // Default specific middleware
@@ -198,7 +198,7 @@ internal class ProducerBuilder : IProducerBuilder
 
                 var factory = MiddlewareCompiler
                     .Compile<ProducerContext<TKey, TMessage, TNativeProperties>, Task>(methodInfo, parameters);
-                return (context, ct) => factory.Invoke(instance, context, context.ServiceProvider, ct);
+                return async (context, ct) => await factory.Invoke(instance, context, context.ServiceProvider, ct).ConfigureAwait(false);
             }
 
             // Generic client-agnostic middleware
@@ -216,7 +216,7 @@ internal class ProducerBuilder : IProducerBuilder
 
                 var factory = MiddlewareCompiler
                     .Compile<ProducerContext<TNativeProperties>, Task>(methodInfo, parameters);
-                return (context, ct) => factory(instance, context, context.ServiceProvider, ct);
+                return async (context, ct) => await factory(instance, context, context.ServiceProvider, ct).ConfigureAwait(false);
             }
 
             // Generic message-agnostic middleware class-based
@@ -237,7 +237,7 @@ internal class ProducerBuilder : IProducerBuilder
 
                 var factory = MiddlewareCompiler
                     .Compile<ProducerContext<TNativeProperties>, Task>(methodInfo, parameters);
-                return (context, ct) => factory(instance, context, context.ServiceProvider, ct);
+                return async (context, ct) => await factory(instance, context, context.ServiceProvider, ct).ConfigureAwait(false);
             }
 
             // If we cannot recognize the middleware, we simply skip it

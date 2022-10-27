@@ -72,7 +72,7 @@ internal class RabbitProducer<TMessage> : IProducer<string, TMessage>
         var context = new ProducerContext<string, TMessage, RabbitProducerProperties>(
             scope.ServiceProvider, nativeProperties, routingKey, message);
 
-        await pipeline.Invoke(context, cancellationToken);
+        await pipeline.Invoke(context, cancellationToken).ConfigureAwait(false);
     }
 
     private Task SendMessage(
