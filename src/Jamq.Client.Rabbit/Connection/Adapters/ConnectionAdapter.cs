@@ -1,4 +1,5 @@
-﻿using RabbitMQ.Client;
+﻿using Jamq.Client.Abstractions.Diagnostics;
+using RabbitMQ.Client;
 
 namespace Jamq.Client.Rabbit.Connection.Adapters;
 
@@ -46,6 +47,7 @@ internal class ConnectionAdapter : IConnectionAdapter
 
         var channel = connection.CreateModel();
         channel.ModelShutdown += FreeChannel!;
+        Event.WriteIfEnabled(Diagnostics.ChannelOpen, new { Channel = channel });
         return new ChannelAdapter(channel);
     }
 
@@ -58,6 +60,7 @@ internal class ConnectionAdapter : IConnectionAdapter
 
     private void FireShutdownEvent(object sender, ShutdownEventArgs e)
     {
+        Event.WriteIfEnabled(Diagnostics.ConnectionDisrupt, new { Connection = sender });
         OnDisrupted?.Invoke(this, new ConnectionDisruptedEventArgs());
     }
 

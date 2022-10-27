@@ -1,4 +1,5 @@
-﻿using Jamq.Client.Rabbit.Connection.Adapters;
+﻿using Jamq.Client.Abstractions.Diagnostics;
+using Jamq.Client.Rabbit.Connection.Adapters;
 using RabbitMQ.Client;
 
 namespace Jamq.Client.Rabbit.Connection;
@@ -67,8 +68,12 @@ internal class ChannelPool : IProducerChannelPool, IConsumerChannelPool
         }
     }
 
-    private IConnectionAdapter CreateConnection() => new ConnectionAdapter(
-        connectionFactory.CreateConnection(), parameters.ChannelsLimit, ReleaseTimeout);
+    private IConnectionAdapter CreateConnection()
+    {
+        var connection = connectionFactory.CreateConnection();
+        Event.WriteIfEnabled(Diagnostics.ConnectionOpen, new { Connection = connection });
+        return new ConnectionAdapter(connection, parameters.ChannelsLimit, ReleaseTimeout);
+    }
 
     private void RemoveAndDisposeConnection(object sender, ConnectionDisruptedEventArgs e)
     {
@@ -84,6 +89,7 @@ internal class ChannelPool : IProducerChannelPool, IConsumerChannelPool
     {
         lock (connections)
         {
+            Event.WriteIfEnabled(Diagnostics.ConnectionClose, new { Connection = connection });
             connection.OnDisrupted -= RemoveAndDisposeConnection!;
             connection.Dispose();
         }
