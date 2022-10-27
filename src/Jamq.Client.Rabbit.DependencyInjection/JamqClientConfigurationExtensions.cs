@@ -28,7 +28,9 @@ public static class JamqClientConfigurationExtensions
             builder => builder
                 .WithMiddleware(typeof(DefaultDiagnosticMiddleware<>))
                 .WithMiddleware(typeof(DefaultCodecMiddleware<>)),
-            b => b.WithMiddleware(typeof(DefaultCodecMiddleware<>)));
+            b => b
+                .WithMiddleware(typeof(DefaultDiagnosticMiddleware<>))
+                .WithMiddleware(typeof(DefaultCodecMiddleware<>)));
 
         return configuration;
     }
@@ -43,7 +45,7 @@ public static class JamqClientConfigurationExtensions
                 ["platform"] = ".NET",
                 ["platform-version"] = Environment.Version.ToString(),
                 ["product"] = "Jamq.Client",
-                ["version"] = "0.5.1"
+                ["version"] = "0.5.2"
             }
         };
 }
