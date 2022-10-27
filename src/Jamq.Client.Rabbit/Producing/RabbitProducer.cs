@@ -62,7 +62,7 @@ internal class RabbitProducer<TMessage> : IProducer<string, TMessage>
         await using var scope = serviceProvider.CreateAsyncScope();
 
         var basicProperties = channelAccessor.Value.Channel.CreateBasicProperties();
-        var nativeProperties = new RabbitProducerProperties(basicProperties);
+        var nativeProperties = new RabbitProducerProperties(basicProperties, parameters);
         var context = new ProducerContext<string, TMessage, RabbitProducerProperties>(
             scope.ServiceProvider, nativeProperties, routingKey, message);
         await pipeline.Invoke(context, cancellationToken);

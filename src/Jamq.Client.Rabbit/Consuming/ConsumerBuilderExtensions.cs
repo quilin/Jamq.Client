@@ -1,6 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using RabbitMQ.Client.Events;
 using Jamq.Client.Abstractions.Consuming;
 using Jamq.Client.Rabbit.Connection;
 
@@ -21,7 +20,7 @@ public static class ConsumerBuilderExtensions
         RabbitConsumerParameters parameters)
         where TProcessor : IProcessor<string, TMessage>
     {
-        var components = builder.GetMiddlewares<string, TMessage, BasicDeliverEventArgs>();
+        var components = builder.GetMiddlewares<string, TMessage, RabbitConsumerProperties>();
 
         var serviceProvider = builder.GetServiceProvider();
         var channelPool = serviceProvider.GetRequiredService<IConsumerChannelPool>();

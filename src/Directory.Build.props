@@ -2,7 +2,7 @@
     <PropertyGroup>
         <Authors>quilin</Authors>
         <Owners>quilin</Owners>
-        <PackageTags>RabbitMQ, Client</PackageTags>
+        <PackageTags>RabbitMQ, Kafka, Client</PackageTags>
         <RepositoryUrl>https://github.com/quilin/Jamq.Client</RepositoryUrl>
         <PackageProjectUrl>https://github.com/quilin/Jamq.Client</PackageProjectUrl>
     </PropertyGroup>
