@@ -25,8 +25,9 @@ public class DefaultDiagnosticMiddleware<TMessage> : DefaultDiagnosticMiddleware
         ProducerDelegate<string, TMessage, RabbitProducerProperties> next,
         CancellationToken cancellationToken)
     {
+        var exchangeName = context.NativeProperties.Parameters.ExchangeName;
         using var activity = Event.ActivitySource.StartActivity(
-            Event.Produce,
+            Event.Produce(exchangeName),
             ActivityKind.Producer,
             default(ActivityContext));
         var activityContext = activity switch
@@ -36,7 +37,7 @@ public class DefaultDiagnosticMiddleware<TMessage> : DefaultDiagnosticMiddleware
         };
 
         activity?.AddTag("messaging.system", "rabbitmq");
-        activity?.AddTag("messaging.destination_kind", "exchange");
+        activity?.AddTag("messaging.destination_kind", "topic");
         activity?.AddTag("messaging.destination", context.NativeProperties.Parameters.ExchangeName);
         activity?.AddTag("messaging.rabbitmq.routing_key", context.Key);
         
@@ -59,15 +60,23 @@ public class DefaultDiagnosticMiddleware<TMessage> : DefaultDiagnosticMiddleware
         ConsumerDelegate<string, TMessage, RabbitConsumerProperties> next,
         CancellationToken cancellationToken)
     {
-        var basicProperties = context.NativeProperties.BasicDeliverEventArgs.BasicProperties;
+        var basicDeliverEventArgs = context.NativeProperties.BasicDeliverEventArgs;
 
-        var parentContext = Propagator.Extract(default, basicProperties, Extract);
+        var parentContext = Propagator.Extract(default, basicDeliverEventArgs.BasicProperties, Extract);
         Baggage.Current = parentContext.Baggage;
 
         using var activity = Event.ActivitySource.StartActivity(
-            Event.Consume,
+            Event.Consume(context.NativeProperties.Parameters.QueueName, basicDeliverEventArgs.ConsumerTag),
             ActivityKind.Consumer,
             parentContext.ActivityContext);
+
+        activity?.AddTag("messaging.system", "rabbitmq");
+        activity?.AddTag("messaging.destination_kind", "queue");
+        activity?.AddTag("messaging.destination", context.NativeProperties.Parameters.DeclaredQueueName);
+        activity?.AddTag("messaging.message_id", basicDeliverEventArgs.DeliveryTag);
+        activity?.AddTag("messaging.conversation_id", basicDeliverEventArgs.BasicProperties.CorrelationId);
+        activity?.AddTag("messaging.consumer_id", basicDeliverEventArgs.ConsumerTag);
+        activity?.AddTag("messaging.rabbitmq.routing_key", context.Key);
 
         return await next.Invoke(context, cancellationToken).ConfigureAwait(false);
     }

@@ -18,6 +18,8 @@ public static class Event
     }
 
     // Activities
-    internal const string Produce = nameof(Produce);
-    internal const string Consume = nameof(Consume);
+    internal static string Produce(string exchange) => Combine(nameof(Produce), exchange);
+    internal static string Consume(string queue, string consumerTag) => Combine(nameof(Consume), queue, consumerTag);
+
+    private static string Combine(params string[] parts) => $"{SourceName}.{string.Join(".", parts)}";
 }
