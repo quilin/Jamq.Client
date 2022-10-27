@@ -30,17 +30,13 @@ public class DefaultDiagnosticMiddleware<TMessage> : DefaultDiagnosticMiddleware
             Event.Produce(exchangeName),
             ActivityKind.Producer,
             default(ActivityContext));
-        var activityContext = activity switch
-        {
-            null => Activity.Current?.Context ?? default,
-            _ => activity.Context
-        };
+        var activityContext = activity?.Context ?? Activity.Current?.Context ?? default;
 
         activity?.AddTag("messaging.system", "rabbitmq");
         activity?.AddTag("messaging.destination_kind", "topic");
         activity?.AddTag("messaging.destination", context.NativeProperties.Parameters.ExchangeName);
         activity?.AddTag("messaging.rabbitmq.routing_key", context.Key);
-        
+
         Propagator.Inject(
             new PropagationContext(activityContext, Baggage.Current),
             context.NativeProperties.BasicProperties,
