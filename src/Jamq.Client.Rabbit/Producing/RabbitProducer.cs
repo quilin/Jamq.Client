@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using Jamq.Client.Abstractions.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
 using Jamq.Client.Abstractions.Producing;
 using Jamq.Client.Rabbit.Connection;
 using Jamq.Client.Rabbit.Connection.Adapters;
@@ -26,13 +27,18 @@ internal class RabbitProducer<TMessage> : IProducer<string, TMessage>
 
         pipeline = middlewares.Reverse().Aggregate((ProducerDelegate<string, TMessage, RabbitProducerProperties>)SendMessage,
             (current, component) => component(current));
-        channelAccessor = CreateChannelAccessor();
+        channelAccessor = CreateChannelAccessor(false);
     }
 
-    private Lazy<IChannelAdapter> CreateChannelAccessor() => new(() =>
+    private Lazy<IChannelAdapter> CreateChannelAccessor(bool restored) => new(() =>
     {
         var channel = channelPool.Get();
         channel.OnDisrupted += Restore!;
+        if (restored)
+        {
+            Event.WriteIfEnabled(Diagnostics.ChannelRestore, new {Channel = channel});
+        }
+
         Ensure.Produce(channel.Channel, parameters);
         return channel;
     }, LazyThreadSafetyMode.ExecutionAndPublication);
@@ -40,7 +46,7 @@ internal class RabbitProducer<TMessage> : IProducer<string, TMessage>
     private void Restore(object sender, ChannelDisruptedEventArgs e)
     {
         CloseCurrentChannel();
-        channelAccessor = CreateChannelAccessor();
+        channelAccessor = CreateChannelAccessor(true);
     }
 
     private void CloseCurrentChannel()
@@ -65,6 +71,7 @@ internal class RabbitProducer<TMessage> : IProducer<string, TMessage>
         var nativeProperties = new RabbitProducerProperties(basicProperties, parameters);
         var context = new ProducerContext<string, TMessage, RabbitProducerProperties>(
             scope.ServiceProvider, nativeProperties, routingKey, message);
+
         await pipeline.Invoke(context, cancellationToken);
     }
 

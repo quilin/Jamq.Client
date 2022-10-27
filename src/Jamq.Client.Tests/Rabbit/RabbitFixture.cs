@@ -1,4 +1,6 @@
-﻿using Jamq.Client.Abstractions.Consuming;
+﻿using System.Diagnostics;
+using Jamq.Client.Abstractions.Consuming;
+using Jamq.Client.Abstractions.Diagnostics;
 using Jamq.Client.Abstractions.Producing;
 using Jamq.Client.DependencyInjection;
 using Jamq.Client.Rabbit;
@@ -7,12 +9,14 @@ using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
+using Xunit.Abstractions;
 
 namespace Jamq.Client.Tests.Rabbit;
 
 public class RabbitFixture : IDisposable
 {
     public IServiceCollection ServiceCollection { get; }
+    public Lazy<IServiceProvider> ServiceProviderProvider => new(() => providerFactory.CreateServiceProvider(ServiceCollection)); 
     private readonly DefaultServiceProviderFactory providerFactory;
     private (IBasicConsumer consumer, string tag) activeConsumerData;
     private static int deliveryTag;
@@ -41,7 +45,11 @@ public class RabbitFixture : IDisposable
             It.IsAny<IDictionary<string, object>>()));
         channel.Setup(c => c.BasicPublish(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
             It.IsAny<IBasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>()));
-        channel.Setup(c => c.CreateBasicProperties()).Returns(new Mock<IBasicProperties>().Object);
+
+        var basicProperties = new Mock<IBasicProperties>();
+        basicProperties.Setup(p => p.Headers).Returns(new Dictionary<string, object>());
+
+        channel.Setup(c => c.CreateBasicProperties()).Returns(basicProperties.Object);
         channel.Setup(c => c.ConfirmSelect());
         channel.Setup(c => c.WaitForConfirmsOrDie(It.IsAny<TimeSpan>()));
 
@@ -65,13 +73,57 @@ public class RabbitFixture : IDisposable
         ServiceCollection.AddSingleton(connectionFactory.Object);
     }
 
-    public IProducerBuilder GetProducerBuilder() => providerFactory.CreateServiceProvider(ServiceCollection)
-        .GetRequiredService<IProducerBuilder>();
+    public IProducerBuilder GetProducerBuilder() => ServiceProviderProvider.Value.GetRequiredService<IProducerBuilder>();
 
-    public IConsumerBuilder GetConsumerBuilder() => providerFactory.CreateServiceProvider(ServiceCollection)
-        .GetRequiredService<IConsumerBuilder>();
+    public IConsumerBuilder GetConsumerBuilder() => ServiceProviderProvider.Value.GetRequiredService<IConsumerBuilder>();
 
     public void Dispose()
     {
+    }
+
+    internal class Subscriber : IObserver<DiagnosticListener>
+    {
+        private readonly ITestOutputHelper testOutputHelper;
+
+        public Subscriber(ITestOutputHelper testOutputHelper)
+        {
+            this.testOutputHelper = testOutputHelper;
+        }
+        
+        public void OnCompleted()
+        {
+        }
+
+        public void OnError(Exception error)
+        {
+        }
+
+        public void OnNext(DiagnosticListener value)
+        {
+            if (value.Name == Event.SourceName)
+            {
+                value.Subscribe(new Listener(testOutputHelper));
+            }
+        }
+    }
+
+    private class Listener : IObserver<KeyValuePair<string, object?>>
+    {
+        private readonly ITestOutputHelper testOutputHelper;
+
+        public Listener(ITestOutputHelper testOutputHelper)
+        {
+            this.testOutputHelper = testOutputHelper;
+        }
+
+        public void OnCompleted()
+        {
+        }
+
+        public void OnError(Exception error)
+        {
+        }
+
+        public void OnNext(KeyValuePair<string, object?> keyValue) => testOutputHelper.WriteLine($"{keyValue.Key} - {keyValue.Value}");
     }
 }
