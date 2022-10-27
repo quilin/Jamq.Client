@@ -41,7 +41,7 @@ public static class JamqClientConfigurationExtensions
                 ["platform"] = ".NET",
                 ["platform-version"] = Environment.Version.ToString(),
                 ["product"] = "Jamq.Client",
-                ["version"] = "0.3.1"
+                ["version"] = "0.5.1"
             }
         };
 }

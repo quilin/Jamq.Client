@@ -15,7 +15,7 @@ internal class RabbitConsumer<TMessage, TProcessor> : IConsumer
     private readonly ILogger? logger;
     private readonly IChannelPool channelPool;
     private readonly IServiceProvider serviceProvider;
-    private readonly ConsumerDelegate<string, TMessage, BasicDeliverEventArgs> pipeline;
+    private readonly ConsumerDelegate<string, TMessage, RabbitConsumerProperties> pipeline;
 
     private readonly object sync = new();
 
@@ -31,7 +31,7 @@ internal class RabbitConsumer<TMessage, TProcessor> : IConsumer
         IServiceProvider serviceProvider,
         RabbitConsumerParameters parameters,
         ILogger? logger,
-        IEnumerable<Func<ConsumerDelegate<string, TMessage, BasicDeliverEventArgs>, ConsumerDelegate<string, TMessage, BasicDeliverEventArgs>>> middlewares)
+        IEnumerable<Func<ConsumerDelegate<string, TMessage, RabbitConsumerProperties>, ConsumerDelegate<string, TMessage, RabbitConsumerProperties>>> middlewares)
     {
         this.channelPool = channelPool;
         this.serviceProvider = serviceProvider;
@@ -39,11 +39,11 @@ internal class RabbitConsumer<TMessage, TProcessor> : IConsumer
         this.logger = logger;
 
         pipeline = middlewares.Reverse().Aggregate(
-            (ConsumerDelegate<string, TMessage, BasicDeliverEventArgs>)((context, cancellationToken) =>
+            (ConsumerDelegate<string, TMessage, RabbitConsumerProperties>)((context, cancellationToken) =>
             {
                 var processor = context.ServiceProvider.GetRequiredService<TProcessor>();
                 return processor.Process(
-                    context.Key ?? context.NativeProperties.RoutingKey,
+                    context.Key ?? context.NativeProperties.BasicDeliverEventArgs.RoutingKey,
                     context.Message!,
                     cancellationToken);
             }),
@@ -80,7 +80,7 @@ internal class RabbitConsumer<TMessage, TProcessor> : IConsumer
         var consumer = new AsyncEventingBasicConsumer(channel);
         var currentCancellationTokenSource = cancellationTokenSource!;
 
-        async Task IncomingMessageHandler(object sender, BasicDeliverEventArgs nativeProperties)
+        async Task IncomingMessageHandler(object sender, BasicDeliverEventArgs basicDeliverEventArgs)
         {
             try
             {
@@ -93,7 +93,7 @@ internal class RabbitConsumer<TMessage, TProcessor> : IConsumer
                 if (!countdownEvent!.SafeIncrement())
                 {
                     logger?.LogWarning("Consumer was not able to increment countdown, returning message to the queue");
-                    channelAccessor().BasicNack(nativeProperties.DeliveryTag, false, true);
+                    channelAccessor().BasicNack(basicDeliverEventArgs.DeliveryTag, false, true);
                     return;
                 }
 
@@ -102,10 +102,11 @@ internal class RabbitConsumer<TMessage, TProcessor> : IConsumer
                     ProcessResult processResult;
                     await using (var scope = serviceProvider.CreateAsyncScope())
                     {
-                        var context = new ConsumerContext<string, TMessage, BasicDeliverEventArgs>(
-                            scope.ServiceProvider, nativeProperties)
+                        var properties = new RabbitConsumerProperties(basicDeliverEventArgs, parameters);
+                        var context = new ConsumerContext<string, TMessage, RabbitConsumerProperties>(
+                            scope.ServiceProvider, properties)
                         {
-                            Key = nativeProperties.RoutingKey
+                            Key = basicDeliverEventArgs.RoutingKey
                         };
                         processResult = await pipeline.Invoke(context, currentCancellationTokenSource.Token);
                     }
@@ -113,13 +114,13 @@ internal class RabbitConsumer<TMessage, TProcessor> : IConsumer
                     switch (processResult)
                     {
                         case ProcessResult.Success:
-                            channelAccessor().BasicAck(nativeProperties.DeliveryTag, false);
+                            channelAccessor().BasicAck(basicDeliverEventArgs.DeliveryTag, false);
                             break;
                         case ProcessResult.RetryNeeded:
-                            channelAccessor().BasicNack(nativeProperties.DeliveryTag, false, true);
+                            channelAccessor().BasicNack(basicDeliverEventArgs.DeliveryTag, false, true);
                             break;
                         case ProcessResult.Failure:
-                            channelAccessor().BasicNack(nativeProperties.DeliveryTag, false, false);
+                            channelAccessor().BasicNack(basicDeliverEventArgs.DeliveryTag, false, false);
                             break;
                         default:
                             throw new ArgumentOutOfRangeException();
@@ -128,7 +129,7 @@ internal class RabbitConsumer<TMessage, TProcessor> : IConsumer
                 catch (Exception exception)
                 {
                     logger?.LogError(exception, "Consumer message handler has thrown unhandled exception");
-                    channelAccessor().BasicNack(nativeProperties.DeliveryTag, false, false);
+                    channelAccessor().BasicNack(basicDeliverEventArgs.DeliveryTag, false, false);
                 }
                 finally
                 {
