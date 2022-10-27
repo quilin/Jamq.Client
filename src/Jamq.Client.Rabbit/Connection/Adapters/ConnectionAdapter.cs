@@ -47,7 +47,7 @@ internal class ConnectionAdapter : IConnectionAdapter
 
         var channel = connection.CreateModel();
         channel.ModelShutdown += FreeChannel!;
-        Event.WriteIfEnabled(Diagnostics.ChannelOpen, new { Channel = channel });
+        Event.WriteIfEnabled(RabbitDiagnostics.ChannelOpen, new { Channel = channel });
         return new ChannelAdapter(channel);
     }
 
@@ -60,7 +60,7 @@ internal class ConnectionAdapter : IConnectionAdapter
 
     private void FireShutdownEvent(object sender, ShutdownEventArgs e)
     {
-        Event.WriteIfEnabled(Diagnostics.ConnectionDisrupt, new { Connection = sender });
+        Event.WriteIfEnabled(RabbitDiagnostics.ConnectionDisrupt, new { Connection = sender });
         OnDisrupted?.Invoke(this, new ConnectionDisruptedEventArgs());
     }
 

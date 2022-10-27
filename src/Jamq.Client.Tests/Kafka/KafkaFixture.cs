@@ -8,7 +8,8 @@ namespace Jamq.Client.Tests.Kafka;
 public class KafkaFixture : IDisposable
 {
     public IServiceCollection ServiceCollection { get; }
-    public IServiceProvider ServiceProvider { get; }
+    public IServiceProvider ServiceProvider => providerFactory.CreateServiceProvider(ServiceCollection);
+
     private readonly DefaultServiceProviderFactory providerFactory;
 
     public KafkaFixture()
@@ -18,12 +19,10 @@ public class KafkaFixture : IDisposable
         ServiceCollection.AddJamqClient(config => config
             .UseKafka(new ClientConfig
             {
-                BootstrapServers = "localhost:9093",
+                BootstrapServers = "localhost:9092",
                 SecurityProtocol = SecurityProtocol.Plaintext
             }));
         ServiceCollection.AddSingleton<KafkaProducerBuilderShould.TestProcessor>();
-
-        ServiceProvider = providerFactory.CreateServiceProvider(ServiceCollection);
     }
 
     public void Dispose()

@@ -18,6 +18,7 @@ public class KafkaProducerBuilderShould : IClassFixture<KafkaFixture>
         ITestOutputHelper testOutputHelper)
     {
         this.testOutputHelper = testOutputHelper;
+        fixture.ServiceCollection.AddSingleton(testOutputHelper);
         serviceProvider = fixture.ServiceProvider;
     }
 
@@ -25,13 +26,14 @@ public class KafkaProducerBuilderShould : IClassFixture<KafkaFixture>
     public async Task ConnectToKafka()
     {
         using var producer = serviceProvider.GetRequiredService<IProducerBuilder>()
-            .With<string, string, Message<string, string>>(next => (context, token) =>
+            .With<KafkaProducerProperties<string, string>>(next => (context, token) =>
             {
-                testOutputHelper.WriteLine($"{context.Key}: {context.Message}");
+                var message = context.NativeProperties.Message;
+                testOutputHelper.WriteLine($"{message.Key}: {message.Value}");
                 return next.Invoke(context, token);
             })
             .BuildKafka<string, string>((_, config) => 
-                new KafkaProducerParameters(new ProducerConfig(config), "test"));
+                new KafkaProducerParameters(new ProducerConfig(config), "demo-topic"));
 
         await producer.Send("test", "message", CancellationToken.None);
     }
@@ -40,25 +42,38 @@ public class KafkaProducerBuilderShould : IClassFixture<KafkaFixture>
     public async Task ConsumeStuff()
     {
         using var consumer = serviceProvider.GetRequiredService<IConsumerBuilder>()
-            .With<string, string, ConsumeResult<string, string>>(next => (context, token) =>
+            .With<string, string, KafkaConsumerProperties<string, string>>(next => (context, token) =>
             {
-                testOutputHelper.WriteLine($"Consumed message with key: {context.Key}, body: {context.Message}");
+                var message = context.NativeProperties.ConsumeResult.Message;
+                testOutputHelper.WriteLine($"Consumed message with key: {message.Key}, body: {message.Value}");
                 return next.Invoke(context, token);
             })
             .BuildKafka<string, string, TestProcessor>((_, config) =>
                 new KafkaConsumerParameters(new ConsumerConfig(config)
                 {
-                    GroupId = "ugh"
-                }, "test"));
-        
+                    GroupId = Guid.NewGuid().ToString(),
+                    AutoOffsetReset = AutoOffsetReset.Earliest
+                }, "demo-topic"));
+
         consumer.Subscribe();
 
-        await Task.Delay(300000);
+        await Task.Delay(TimeSpan.FromSeconds(10));
     }
-    
+
     public class TestProcessor : IProcessor<string, string>
     {
-        public Task<ProcessResult> Process(string key, string message, CancellationToken cancellationToken) => 
-            Task.FromResult(ProcessResult.Success);
+        private readonly ITestOutputHelper testOutputHelper;
+
+        public TestProcessor(
+            ITestOutputHelper testOutputHelper)
+        {
+            this.testOutputHelper = testOutputHelper;
+        }
+
+        public Task<ProcessResult> Process(string key, string message, CancellationToken cancellationToken)
+        {
+            testOutputHelper.WriteLine($"Processed message {key}: {message}");
+            return Task.FromResult(ProcessResult.Success);
+        }
     }
 }

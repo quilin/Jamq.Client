@@ -20,6 +20,7 @@
 
     <ItemGroup>
       <ProjectReference Include="..\Jamq.Client.Abstractions\Jamq.Client.Abstractions.csproj" />
+      <ProjectReference Include="..\Jamq.Client\Jamq.Client.csproj" />
     </ItemGroup>
 
 </Project>

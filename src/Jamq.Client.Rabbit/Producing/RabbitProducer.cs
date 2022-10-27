@@ -36,7 +36,7 @@ internal class RabbitProducer<TMessage> : IProducer<string, TMessage>
         channel.OnDisrupted += Restore!;
         if (restored)
         {
-            Event.WriteIfEnabled(Diagnostics.ChannelRestore, new {Channel = channel});
+            Event.WriteIfEnabled(RabbitDiagnostics.ChannelRestore, new {Channel = channel});
         }
 
         Ensure.Produce(channel.Channel, parameters);

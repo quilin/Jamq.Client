@@ -17,7 +17,7 @@ internal class ChannelAdapter : IChannelAdapter
     private void ResolveShutdown(object sender, ShutdownEventArgs e)
     {
         var channel = (IModel) sender;
-        Event.WriteIfEnabled(Diagnostics.ChannelDisrupt, new { Channel = channel });
+        Event.WriteIfEnabled(RabbitDiagnostics.ChannelDisrupt, new { Channel = channel });
         if (e.Initiator != ShutdownInitiator.Peer ||
             e.ReplyCode == ForceTerminationCode && e.ReplyText == ForceTerminationText)
         {
@@ -34,7 +34,7 @@ internal class ChannelAdapter : IChannelAdapter
     public void Dispose()
     {
         Channel.ModelShutdown -= ResolveShutdown!;
-        Event.WriteIfEnabled(Diagnostics.ChannelClose, new { Channel });
+        Event.WriteIfEnabled(RabbitDiagnostics.ChannelClose, new { Channel });
         Channel.Close();
     }
 }
