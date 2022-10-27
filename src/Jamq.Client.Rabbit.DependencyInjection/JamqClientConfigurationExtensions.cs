@@ -21,12 +21,11 @@ public static class JamqClientConfigurationExtensions
             .AddSingleton(sp => CreateConnectionFactory(parametersProvider.Invoke(sp)))
             .AddSingleton<IProducerChannelPool, ChannelPool>()
             .AddSingleton<IConsumerChannelPool, ChannelPool>()
-            .AddTransient(typeof(DefaultRabbitBodyEncodingMiddleware<>))
-            .AddTransient(typeof(DefaultRabbitBodyDecodingMiddleware<>));
+            .AddTransient(typeof(DefaultCodecMiddleware<>));
 
         configuration.EnrichWithClientDefaults(
-            b => b.WithMiddleware(typeof(DefaultRabbitBodyEncodingMiddleware<>)),
-            b => b.WithMiddleware(typeof(DefaultRabbitBodyDecodingMiddleware<>)));
+            b => b.WithMiddleware(typeof(DefaultCodecMiddleware<>)),
+            b => b.WithMiddleware(typeof(DefaultCodecMiddleware<>)));
 
         return configuration;
     }
