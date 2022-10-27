@@ -16,6 +16,16 @@
             <_Parameter1>$(SolutionName).DependencyInjection</_Parameter1>
         </AssemblyAttribute>
     </ItemGroup>
+    <ItemGroup>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>$(SolutionName).Kafka</_Parameter1>
+        </AssemblyAttribute>
+    </ItemGroup>
+    <ItemGroup>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>$(SolutionName).Rabbit</_Parameter1>
+        </AssemblyAttribute>
+    </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\Jamq.Client.Abstractions\Jamq.Client.Abstractions.csproj" />

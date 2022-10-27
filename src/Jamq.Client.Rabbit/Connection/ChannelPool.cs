@@ -71,7 +71,7 @@ internal class ChannelPool : IProducerChannelPool, IConsumerChannelPool
     private IConnectionAdapter CreateConnection()
     {
         var connection = connectionFactory.CreateConnection();
-        Event.WriteIfEnabled(Diagnostics.ConnectionOpen, new { Connection = connection });
+        Event.WriteIfEnabled(RabbitDiagnostics.ConnectionOpen, new { Connection = connection });
         return new ConnectionAdapter(connection, parameters.ChannelsLimit, ReleaseTimeout);
     }
 
@@ -89,7 +89,7 @@ internal class ChannelPool : IProducerChannelPool, IConsumerChannelPool
     {
         lock (connections)
         {
-            Event.WriteIfEnabled(Diagnostics.ConnectionClose, new { Connection = connection });
+            Event.WriteIfEnabled(RabbitDiagnostics.ConnectionClose, new { Connection = connection });
             connection.OnDisrupted -= RemoveAndDisposeConnection!;
             connection.Dispose();
         }

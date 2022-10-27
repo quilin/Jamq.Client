@@ -1,4 +1,5 @@
 ﻿using Confluent.Kafka;
+using Jamq.Client.Abstractions.Diagnostics;
 using Jamq.Client.Abstractions.Producing;
 using Jamq.Client.Kafka.Defaults;
 using Microsoft.Extensions.DependencyInjection;
@@ -48,10 +49,13 @@ public class KafkaProducer<TKey, TMessage> : Abstractions.Producing.IProducer<TK
 
     private async Task SendMessage(
         ProducerContext<TKey, TMessage, KafkaProducerProperties<TKey, TMessage>> context,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken)
+    {
         await nativeProducer.Value
             .ProduceAsync(parameters.Topic, context.NativeProperties.Message, cancellationToken)
             .ConfigureAwait(false);
+        Event.WriteIfEnabled(CommonDiagnostics.MessagePublished, new { parameters.Topic, context.Key });
+    }
 
     public void Dispose()
     {

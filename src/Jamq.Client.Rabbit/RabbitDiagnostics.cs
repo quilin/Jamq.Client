@@ -1,6 +1,6 @@
 namespace Jamq.Client.Rabbit;
 
-internal static class Diagnostics
+internal static class RabbitDiagnostics
 {
     // Entities
     private const string Connection = nameof(Connection);

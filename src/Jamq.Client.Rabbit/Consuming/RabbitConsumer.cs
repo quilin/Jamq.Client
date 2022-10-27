@@ -86,6 +86,7 @@ internal class RabbitConsumer<TMessage, TProcessor> : IConsumer
             {
                 if (currentCancellationTokenSource.IsCancellationRequested)
                 {
+                    // TODO: Diagnostics instead, no logger!!!
                     logger?.LogWarning("Consumer stopped working, but the message keep coming");
                     return;
                 }

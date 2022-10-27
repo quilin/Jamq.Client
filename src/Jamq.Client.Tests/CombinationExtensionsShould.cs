@@ -45,4 +45,19 @@ public class CombinationExtensionsShould
             new[] {typeof(DateTime), typeof(string), typeof(int)},
         });
     }
+
+    [Fact]
+    public void CreateCombinationsWithSameValues()
+    {
+        var list = new[] { typeof(string), typeof(string), typeof(int) };
+        list.GetCombinations(2).Should().BeEquivalentTo(new[]
+        {
+            new[] { typeof(string), typeof(string) },
+            new[] { typeof(string), typeof(string) },
+            new[] { typeof(string), typeof(int) },
+            new[] { typeof(int), typeof(string) },
+            new[] { typeof(string), typeof(int) },
+            new[] { typeof(int), typeof(string) },
+        });
+    }
 }
