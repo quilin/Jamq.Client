@@ -1,5 +1,6 @@
 ﻿using Confluent.Kafka;
 using Jamq.Client.Abstractions.Producing;
+using Jamq.Client.Kafka.Defaults;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Jamq.Client.Kafka.Producing;
@@ -8,21 +9,27 @@ public class KafkaProducer<TKey, TMessage> : Abstractions.Producing.IProducer<TK
 {
     private readonly IServiceProvider serviceProvider;
     private readonly KafkaProducerParameters parameters;
-    private readonly ProducerDelegate<TKey, TMessage, Message<TKey, TMessage>> pipeline;
+    private readonly ProducerDelegate<TKey, TMessage, KafkaProducerProperties<TKey, TMessage>> pipeline;
     private readonly Lazy<Confluent.Kafka.IProducer<TKey, TMessage>> nativeProducer;
 
-    public KafkaProducer(
-        IServiceProvider serviceProvider,
+    public KafkaProducer(IServiceProvider serviceProvider,
         KafkaProducerParameters parameters,
-        IEnumerable<Func<ProducerDelegate<TKey, TMessage, Message<TKey, TMessage>>, ProducerDelegate<TKey, TMessage, Message<TKey, TMessage>>>> middlewares)
+        IEnumerable<Func<
+            ProducerDelegate<TKey, TMessage, KafkaProducerProperties<TKey, TMessage>>,
+            ProducerDelegate<TKey, TMessage, KafkaProducerProperties<TKey, TMessage>>>> middlewares,
+        ISerializer<TKey>? keySerializer,
+        ISerializer<TMessage>? messageSerializer)
     {
         this.serviceProvider = serviceProvider;
         this.parameters = parameters;
         pipeline = middlewares.Reverse().Aggregate(
-            (ProducerDelegate<TKey, TMessage, Message<TKey, TMessage>>)SendMessage,
+            (ProducerDelegate<TKey, TMessage, KafkaProducerProperties<TKey, TMessage>>)SendMessage,
             (current, component) => component(current));
         nativeProducer = new(
-            () => new ProducerBuilder<TKey, TMessage>(parameters.ProducerConfig).Build(),
+            () => new ProducerBuilder<TKey, TMessage>(parameters.ProducerConfig)
+                .SetKeySerializer(keySerializer ?? new DefaultKafkaSerializer<TKey>())
+                .SetValueSerializer(messageSerializer ?? new DefaultKafkaSerializer<TMessage>())
+                .Build(),
             LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
@@ -33,15 +40,18 @@ public class KafkaProducer<TKey, TMessage> : Abstractions.Producing.IProducer<TK
         await using var scope = serviceProvider.CreateAsyncScope();
 
         var nativeMessage = new Message<TKey, TMessage> { Key = key, Value = message };
-        var context = new ProducerContext<TKey, TMessage, Message<TKey, TMessage>>(
-            scope.ServiceProvider, nativeMessage, key, message);
-        await pipeline.Invoke(context, cancellationToken);
+        var properties = new KafkaProducerProperties<TKey, TMessage>(nativeMessage, parameters);
+        var context = new ProducerContext<TKey, TMessage, KafkaProducerProperties<TKey, TMessage>>(
+            scope.ServiceProvider, properties, key, message);
+        await pipeline.Invoke(context, cancellationToken).ConfigureAwait(false);
     }
 
-    private Task SendMessage(
-        ProducerContext<TKey, TMessage, Message<TKey, TMessage>> context,
+    private async Task SendMessage(
+        ProducerContext<TKey, TMessage, KafkaProducerProperties<TKey, TMessage>> context,
         CancellationToken cancellationToken) =>
-        nativeProducer.Value.ProduceAsync(parameters.Topic, context.NativeProperties, cancellationToken);
+        await nativeProducer.Value
+            .ProduceAsync(parameters.Topic, context.NativeProperties.Message, cancellationToken)
+            .ConfigureAwait(false);
 
     public void Dispose()
     {

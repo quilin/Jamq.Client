@@ -5,9 +5,10 @@ namespace Jamq.Client.Abstractions.Diagnostics;
 public static class Event
 {
     public const string SourceName = "Jamq.Client";
+    public const string VersionName = "0.6.1";
 
     private static readonly DiagnosticSource DiagnosticSource = new DiagnosticListener(SourceName);
-    internal static readonly ActivitySource ActivitySource = new(SourceName);
+    internal static readonly ActivitySource ActivitySource = new(SourceName, VersionName);
 
     internal static void WriteIfEnabled(string name, object? value)
     {
