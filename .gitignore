@@ -4,3 +4,4 @@ obj
 bundles
 .vs
 *.user
+.DS_store
