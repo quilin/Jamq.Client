@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Jamq.Client.Abstractions.Consuming;
 using Jamq.Client.Rabbit.Connection;
 
@@ -24,8 +23,7 @@ public static class ConsumerBuilderExtensions
 
         var serviceProvider = builder.GetServiceProvider();
         var channelPool = serviceProvider.GetRequiredService<IConsumerChannelPool>();
-        var logger = serviceProvider.GetService<ILogger<RabbitConsumer<TMessage, TProcessor>>>();
 
-        return new RabbitConsumer<TMessage, TProcessor>(channelPool, serviceProvider, parameters, logger, components);
+        return new RabbitConsumer<TMessage, TProcessor>(channelPool, serviceProvider, parameters, components);
     }
 }

@@ -1,8 +1,8 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using Jamq.Client.Abstractions.Consuming;
+using Jamq.Client.Abstractions.Diagnostics;
 using Jamq.Client.Rabbit.Connection;
 using Jamq.Client.Rabbit.Connection.Adapters;
 
@@ -12,7 +12,6 @@ internal class RabbitConsumer<TMessage, TProcessor> : IConsumer
     where TProcessor : IProcessor<string, TMessage>
 {
     private readonly RabbitConsumerParameters parameters;
-    private readonly ILogger? logger;
     private readonly IChannelPool channelPool;
     private readonly IServiceProvider serviceProvider;
     private readonly ConsumerDelegate<string, TMessage, RabbitConsumerProperties> pipeline;
@@ -30,13 +29,11 @@ internal class RabbitConsumer<TMessage, TProcessor> : IConsumer
         IChannelPool channelPool,
         IServiceProvider serviceProvider,
         RabbitConsumerParameters parameters,
-        ILogger? logger,
         IEnumerable<Func<ConsumerDelegate<string, TMessage, RabbitConsumerProperties>, ConsumerDelegate<string, TMessage, RabbitConsumerProperties>>> middlewares)
     {
         this.channelPool = channelPool;
         this.serviceProvider = serviceProvider;
         this.parameters = parameters;
-        this.logger = logger;
 
         pipeline = middlewares.Reverse().Aggregate(
             (ConsumerDelegate<string, TMessage, RabbitConsumerProperties>)((context, cancellationToken) =>
@@ -82,18 +79,24 @@ internal class RabbitConsumer<TMessage, TProcessor> : IConsumer
 
         async Task IncomingMessageHandler(object sender, BasicDeliverEventArgs basicDeliverEventArgs)
         {
+            var processDiagnosticInfo = new
+            {
+                basicDeliverEventArgs.DeliveryTag,
+                basicDeliverEventArgs.ConsumerTag,
+                parameters.QueueName
+            };
+            Event.WriteIfEnabled(CommonDiagnostics.MessageReceived, processDiagnosticInfo);
             try
             {
                 if (currentCancellationTokenSource.IsCancellationRequested)
                 {
-                    // TODO: Diagnostics instead, no logger!!!
-                    logger?.LogWarning("Consumer stopped working, but the message keep coming");
+                    Event.WriteIfEnabled(RabbitDiagnostics.ConsumerCancelDisrupt, processDiagnosticInfo);
                     return;
                 }
 
                 if (!countdownEvent!.SafeIncrement())
                 {
-                    logger?.LogWarning("Consumer was not able to increment countdown, returning message to the queue");
+                    Event.WriteIfEnabled(RabbitDiagnostics.MessageReceiveDisrupt, processDiagnosticInfo);
                     channelAccessor().BasicNack(basicDeliverEventArgs.DeliveryTag, false, true);
                     return;
                 }
@@ -115,12 +118,15 @@ internal class RabbitConsumer<TMessage, TProcessor> : IConsumer
                     switch (processResult)
                     {
                         case ProcessResult.Success:
+                            Event.WriteIfEnabled(CommonDiagnostics.MessageProcessSuccess, processDiagnosticInfo);
                             channelAccessor().BasicAck(basicDeliverEventArgs.DeliveryTag, false);
                             break;
                         case ProcessResult.RetryNeeded:
+                            Event.WriteIfEnabled(CommonDiagnostics.MessageProcessRetry, processDiagnosticInfo);
                             channelAccessor().BasicNack(basicDeliverEventArgs.DeliveryTag, false, true);
                             break;
                         case ProcessResult.Failure:
+                            Event.WriteIfEnabled(CommonDiagnostics.MessageProcessFailure, processDiagnosticInfo);
                             channelAccessor().BasicNack(basicDeliverEventArgs.DeliveryTag, false, false);
                             break;
                         default:
@@ -129,7 +135,13 @@ internal class RabbitConsumer<TMessage, TProcessor> : IConsumer
                 }
                 catch (Exception exception)
                 {
-                    logger?.LogError(exception, "Consumer message handler has thrown unhandled exception");
+                    Event.WriteIfEnabled(CommonDiagnostics.MessageProcessFailure, new
+                    {
+                        basicDeliverEventArgs.DeliveryTag,
+                        basicDeliverEventArgs.ConsumerTag,
+                        parameters.QueueName,
+                        Exception = exception
+                    });
                     channelAccessor().BasicNack(basicDeliverEventArgs.DeliveryTag, false, false);
                 }
                 finally
@@ -139,7 +151,13 @@ internal class RabbitConsumer<TMessage, TProcessor> : IConsumer
             }
             catch (Exception exception)
             {
-                logger?.LogError(exception, "Consumer message handler has thrown unhandled exception");
+                Event.WriteIfEnabled(RabbitDiagnostics.MessageReceiveDisrupt, new
+                {
+                    basicDeliverEventArgs.DeliveryTag,
+                    basicDeliverEventArgs.ConsumerTag,
+                    parameters.QueueName,
+                    Exception = exception
+                });
             }
         }
 
@@ -173,13 +191,11 @@ internal class RabbitConsumer<TMessage, TProcessor> : IConsumer
     {
         lock (sync)
         {
-            logger?.LogWarning("Consumer connection to broker was disrupted");
             CloseCurrentConnection(connectionIsDisrupted: true);
             connectionAccessor = CreateConnectionAccessor();
 
             if (running)
             {
-                logger?.LogWarning("Trying to restore connection and resume consuming");
                 Consume();
             }
         }
@@ -215,7 +231,9 @@ internal class RabbitConsumer<TMessage, TProcessor> : IConsumer
 
             if (!countdownEvent.Wait(parameters.MaxProcessingAnticipation))
             {
-                logger?.LogError("The consumer didn't wait for message processor to gracefully shutdown and is forcefully stopping it");
+                Event.WriteIfEnabled(
+                    RabbitDiagnostics.ConsumerCancelTimeout,
+                    new { parameters.ConsumerTag, parameters.QueueName });
             }
 
             CloseCurrentConnection(connectionIsDisrupted: false);
