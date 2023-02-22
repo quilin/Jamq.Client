@@ -10,12 +10,12 @@ public abstract class DefaultKafkaSerializer
 
 public class DefaultKafkaSerializer<TValue> : DefaultKafkaSerializer,
     ISerializer<TValue>,
-    IDeserializer<TValue?>
+    IDeserializer<TValue>
 {
     public byte[] Serialize(TValue data, SerializationContext context) => 
         JsonSerializer.SerializeToUtf8Bytes(data, typeof(TValue), SerializerOptions);
 
-    public TValue? Deserialize(ReadOnlySpan<byte> data, bool isNull, SerializationContext context) => isNull
+    public TValue Deserialize(ReadOnlySpan<byte> data, bool isNull, SerializationContext context) => (isNull
         ? default
-        : JsonSerializer.Deserialize<TValue>(data, SerializerOptions)!;
+        : JsonSerializer.Deserialize<TValue>(data, SerializerOptions))!;
 }
