@@ -94,6 +94,7 @@ internal class RabbitProducer<TMessage> : IProducer<string, TMessage>
             true,
             context.NativeProperties.BasicProperties,
             context.NativeProperties.Body);
+        Event.WriteIfEnabled(CommonDiagnostics.MessagePublished, new { parameters.ExchangeName });
 
         if (waitForConfirms)
         {

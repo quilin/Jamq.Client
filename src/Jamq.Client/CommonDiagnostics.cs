@@ -16,6 +16,7 @@ internal static class CommonDiagnostics
     private const string Received = nameof(Received);
     private const string Complete = nameof(Complete);
     private const string Success = nameof(Success);
+    private const string Retry = nameof(Retry);
     private const string Failure = nameof(Failure);
 
     public static readonly string ConsumerSubscribed = Combine(Consumer, Subscribed);
@@ -26,5 +27,6 @@ internal static class CommonDiagnostics
 
     public static readonly string MessageProcessComplete = Combine(Process, Complete);
     public static readonly string MessageProcessSuccess = Combine(Process, Success);
+    public static readonly string MessageProcessRetry = Combine(Process, Retry);
     public static readonly string MessageProcessFailure = Combine(Process, Failure);
 }
