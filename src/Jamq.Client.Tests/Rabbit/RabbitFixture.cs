@@ -25,10 +25,12 @@ public class RabbitFixture : IDisposable
     {
         providerFactory = new DefaultServiceProviderFactory();
         ServiceCollection = providerFactory.CreateBuilder(new ServiceCollection());
+
+        var connectionFactory = new Mock<IAsyncConnectionFactory>();
+        ServiceCollection.AddSingleton(connectionFactory.Object);
         ServiceCollection.AddJamqClient(config => config
             .UseRabbit(new RabbitConnectionParameters()));
 
-        var connectionFactory = new Mock<IConnectionFactory>();
         var connection = new Mock<IConnection>();
         var channel = new Mock<IModel>();
         connectionFactory.Setup(f => f.CreateConnection()).Returns(connection.Object);
@@ -62,12 +64,12 @@ public class RabbitFixture : IDisposable
         channel.Setup(c => c.BasicPublish(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
                 It.IsAny<IBasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>()))
             .Callback<string, string, bool, IBasicProperties, ReadOnlyMemory<byte>>(
-                (exchange, routingKey, _, basicProperties, body) =>
+                (exchange, routingKey, _, bp, body) =>
                 {
                     var (consumer, tag) = activeConsumerData;
                     (consumer as AsyncEventingBasicConsumer)?.HandleBasicDeliver(
                         tag, (ulong) Interlocked.Increment(ref deliveryTag), false, exchange,
-                        routingKey, basicProperties, body);
+                        routingKey, bp, body);
                 });
 
         ServiceCollection.AddSingleton(connectionFactory.Object);

@@ -29,8 +29,7 @@ Now you can use the `ConfigureServices` method of your `Startup.cs` to register 
 ```csharp
 public void ConfigureServices(IServiceCollection services)
 {
-    services.AddJamqClient(config => config
-        .UseRabbit(new RabbitConnectionParameters()));
+    services.AddJamqClient(config => config.UseRabbit());
 }
 ```
 
@@ -44,7 +43,7 @@ By default the producers and consumers are enriched with some generic encoding/d
 public void ConfigureServices(IServiceCollection services)
 {
     services.AddJamqClient(
-        config => config.UseRabbit(new RabbitConnectionParameters()),
+        config => config.UseRabbit(),
         producerBuilder => producerBuilder.WithMiddleware<ProducerCorrelationMiddleware>(),
         consumerBuilder => consumerBuilder.WithMiddleware<ConsumerCorrelationMiddleware>());
 }
@@ -58,14 +57,25 @@ Although Producers and Consumers implementations may vary, the middlewares are t
 
 ## Rabbit MQ
 
-This is enough for a quickstart with connection to default `amqp://localhost:5672/` RabbitMQ endpoint as `guest:guest`. If you want to use specific endpoint, you need another constructor:
+The `.UseRabbit()` method will use default connection factory, with `amqp://localhost:5672/` endpoint and `guest:guest` credentials. If you use simple password credentials, you can specify them with constructor:
 
 ```c#
-new RabbitConnectionParameters("amqp://my-rabbit-mq-host:5673", "admin", "secret");
+services.AddJamqClient(
+    config => config.UseRabbit(
+        new RabbitConnectionParameters("amqp://my-rabbit-mq-host:5673", "admin", "secret")));
 ```
 
+If you need more detailed configuration, you may register your own connection factory from `RabbitMQ.Client`. Please, notice that the factory has to be `IAsyncConnectionFactory`, otherwise the client will create default one with registered parameters.
+```c#
+services.AddSingleton<IAsyncConnectionFactory>(sp => new ConnectionFactory
+{
+    Ssl = new SslOption("myserver", "mycert", true),
+});
+```
+
+This is poor design, but this factory will be modified to be async and to have the library specific properties. [Sorry](https://github.com/quilin/Jamq.Client/issues/28).
+
 **TODOS:**
-- Generic conventional middlewares (e.g. `class TMw<TKey> { ctor(Delegate<TKey, Message, Props> next) }` - same as interface)
 - Registration of generic scoped consumers to inject `RabbitConsumer<THandler, TMessage>` without builder (named `HttpClient`-style)
 
 ### Producer

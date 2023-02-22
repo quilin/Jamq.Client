@@ -10,6 +10,10 @@ namespace Jamq.Client.Rabbit.DependencyInjection;
 public static class JamqClientConfigurationExtensions
 {
     public static JamqClientConfiguration UseRabbit(
+        this JamqClientConfiguration configuration) =>
+        UseRabbit(configuration, _ => new RabbitConnectionParameters());
+
+    public static JamqClientConfiguration UseRabbit(
         this JamqClientConfiguration configuration, RabbitConnectionParameters parameters) =>
         UseRabbit(configuration, _ => parameters);
 
@@ -19,9 +23,8 @@ public static class JamqClientConfigurationExtensions
     {
         configuration.GetServiceCollection()
             .AddSingleton(parametersProvider)
-            .AddSingleton(sp => CreateConnectionFactory(parametersProvider.Invoke(sp)))
-            .AddSingleton<IProducerChannelPool, ChannelPool>()
-            .AddSingleton<IConsumerChannelPool, ChannelPool>()
+            .AddSingleton<IProducerChannelPool, ChannelPool>(ChannelPoolProvider)
+            .AddSingleton<IConsumerChannelPool, ChannelPool>(ChannelPoolProvider)
             .AddTransient(typeof(DefaultDiagnosticMiddleware<>))
             .AddTransient(typeof(DefaultCodecMiddleware<>));
 
@@ -36,17 +39,26 @@ public static class JamqClientConfigurationExtensions
         return configuration;
     }
 
-    private static IConnectionFactory CreateConnectionFactory(RabbitConnectionParameters parameters) =>
-        new ConnectionFactory
-        {
-            Endpoint = new AmqpTcpEndpoint(new Uri(parameters.EndpointUrl)),
-            DispatchConsumersAsync = true,
-            ClientProperties = new Dictionary<string, object>
+    private static ChannelPool ChannelPoolProvider(IServiceProvider serviceProvider)
+    {
+        var parameters = serviceProvider.GetService<RabbitConnectionParameters>() ??
+            new RabbitConnectionParameters();
+        var connectionFactory = serviceProvider.GetService<IAsyncConnectionFactory>() ??
+            new ConnectionFactory
             {
-                ["platform"] = ".NET",
-                ["platform-version"] = Environment.Version.ToString(),
-                ["product"] = Event.SourceName,
-                ["version"] = Event.VersionName
-            }
+                Endpoint = new AmqpTcpEndpoint(new Uri(parameters.EndpointUrl)),
+                UserName = parameters.UserName,
+                Password = parameters.Password,
+            };
+
+        connectionFactory.DispatchConsumersAsync = true;
+        connectionFactory.ClientProperties = new Dictionary<string, object>
+        {
+            ["platform"] = ".NET",
+            ["platform-version"] = Environment.Version.ToString(),
+            ["product"] = Event.SourceName,
+            ["version"] = Event.VersionName
         };
+        return new ChannelPool(connectionFactory, parameters);
+    }
 }
