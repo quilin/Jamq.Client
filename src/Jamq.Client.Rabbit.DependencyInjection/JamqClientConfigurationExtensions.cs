@@ -49,6 +49,7 @@ public static class JamqClientConfigurationExtensions
                 Endpoint = new AmqpTcpEndpoint(new Uri(parameters.EndpointUrl)),
                 UserName = parameters.UserName,
                 Password = parameters.Password,
+                VirtualHost = parameters.VirtualHost,
             };
 
         connectionFactory.DispatchConsumersAsync = true;
