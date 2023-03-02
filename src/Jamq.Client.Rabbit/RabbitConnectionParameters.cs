@@ -8,7 +8,7 @@ public class RabbitConnectionParameters
     /// <summary>
     /// Create default connection parameters for local testing
     /// </summary>
-    public RabbitConnectionParameters() : this("amqp://localhost:5672/", "guest", "guest")
+    public RabbitConnectionParameters() : this("amqp://localhost:5672", "/", "guest", "guest")
     {
     }
 
@@ -18,9 +18,14 @@ public class RabbitConnectionParameters
     /// <param name="endpointUrl">Host and port of broker</param>
     /// <param name="userName">User name</param>
     /// <param name="password">Password</param>
-    public RabbitConnectionParameters(string endpointUrl, string userName, string password)
+    public RabbitConnectionParameters(string endpointUrl, string userName, string password) : this(endpointUrl, "/", userName, password)
+    {
+    }
+
+    public RabbitConnectionParameters(string endpointUrl, string virtualHost, string userName, string password)
     {
         EndpointUrl = endpointUrl;
+        VirtualHost = virtualHost;
         UserName = userName;
         Password = password;
     }
@@ -29,6 +34,11 @@ public class RabbitConnectionParameters
     /// Endpoint URL
     /// </summary>
     public string EndpointUrl { get; }
+
+    /// <summary>
+    /// Virtual host
+    /// </summary>
+    public string VirtualHost { get; }
 
     /// <summary>
     /// User name
