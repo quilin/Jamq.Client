@@ -1,7 +1,6 @@
 ﻿using Confluent.Kafka;
 using Jamq.Client.Abstractions.Diagnostics;
 using Jamq.Client.Abstractions.Producing;
-using Jamq.Client.Kafka.Defaults;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Jamq.Client.Kafka.Producing;
@@ -18,8 +17,7 @@ public class KafkaProducer<TKey, TMessage> : Abstractions.Producing.IProducer<TK
         IEnumerable<Func<
             ProducerDelegate<TKey, TMessage, KafkaProducerProperties<TKey, TMessage>>,
             ProducerDelegate<TKey, TMessage, KafkaProducerProperties<TKey, TMessage>>>> middlewares,
-        ISerializer<TKey>? keySerializer,
-        ISerializer<TMessage>? messageSerializer)
+        Func<ProducerBuilder<TKey, TMessage>, ProducerBuilder<TKey, TMessage>> enrichBuilder)
     {
         this.serviceProvider = serviceProvider;
         this.parameters = parameters;
@@ -27,10 +25,7 @@ public class KafkaProducer<TKey, TMessage> : Abstractions.Producing.IProducer<TK
             (ProducerDelegate<TKey, TMessage, KafkaProducerProperties<TKey, TMessage>>)SendMessage,
             (current, component) => component(current));
         nativeProducer = new(
-            () => new ProducerBuilder<TKey, TMessage>(parameters.ProducerConfig)
-                .SetKeySerializer(keySerializer ?? new DefaultKafkaSerializer<TKey>())
-                .SetValueSerializer(messageSerializer ?? new DefaultKafkaSerializer<TMessage>())
-                .Build(),
+            () => enrichBuilder.Invoke(new ProducerBuilder<TKey, TMessage>(parameters.ProducerConfig)).Build(),
             LazyThreadSafetyMode.ExecutionAndPublication);
     }
 

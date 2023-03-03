@@ -11,14 +11,12 @@ public static class ConsumerBuilderExtensions
     /// </summary>
     /// <param name="builder">Consumer builder</param>
     /// <param name="parametersProvider">Consumer configuration provider</param>
-    /// <param name="keyDeserializer">Key deserializer</param>
-    /// <param name="messageDeserializer">Message deserializer</param>
+    /// <param name="enrichBuilder">Enrich native kafka consumer builder with custom parameters</param>
     /// <returns>Confluent.Kafka producer</returns>
     public static IConsumer BuildKafka<TKey, TMessage, TProcessor>(
         this IConsumerBuilder builder,
         Func<IServiceProvider, ClientConfig, KafkaConsumerParameters> parametersProvider,
-        IDeserializer<TKey>? keyDeserializer = null,
-        IDeserializer<TMessage>? messageDeserializer = null)
+        Func<ConsumerBuilder<TKey, TMessage>, ConsumerBuilder<TKey, TMessage>>? enrichBuilder = null)
         where TProcessor : IProcessor<TKey, TMessage>
     {
         var middlewares = builder.GetMiddlewares<TKey, TMessage, KafkaConsumerProperties<TKey, TMessage>>();
@@ -26,7 +24,7 @@ public static class ConsumerBuilderExtensions
         var clientConfig = serviceProvider.GetRequiredService<ClientConfig>();
         var parameters = parametersProvider.Invoke(serviceProvider, clientConfig);
         return new KafkaConsumer<TKey, TMessage, TProcessor>(
-            serviceProvider, parameters, middlewares, keyDeserializer, messageDeserializer);
+            serviceProvider, parameters, middlewares, enrichBuilder ?? (b => b));
     }
 
     /// <summary>
@@ -34,32 +32,26 @@ public static class ConsumerBuilderExtensions
     /// </summary>
     /// <param name="builder">Consumer builder</param>
     /// <param name="parametersProvider">Consumer configuration provider</param>
-    /// <param name="keyDeserializer">Key deserializer</param>
-    /// <param name="messageDeserializer">Message deserializer</param>
+    /// <param name="enrichBuilder">Enrich native kafka consumer builder with custom parameters</param>
     /// <returns>Confluent.Kafka producer</returns>
     public static IConsumer BuildKafka<TKey, TMessage, TProcessor>(
         this IConsumerBuilder builder,
         Func<IServiceProvider, KafkaConsumerParameters> parametersProvider,
-        IDeserializer<TKey>? keyDeserializer = null,
-        IDeserializer<TMessage>? messageDeserializer = null)
+        Func<ConsumerBuilder<TKey, TMessage>, ConsumerBuilder<TKey, TMessage>>? enrichBuilder = null)
         where TProcessor : IProcessor<TKey, TMessage> =>
-        BuildKafka<TKey, TMessage, TProcessor>(
-            builder, (sp, _) => parametersProvider(sp), keyDeserializer, messageDeserializer);
+        BuildKafka<TKey, TMessage, TProcessor>(builder, (sp, _) => parametersProvider(sp), enrichBuilder);
 
     /// <summary>
     /// Build consumer for Confluent.Kafka
     /// </summary>
     /// <param name="builder">Consumer builder</param>
     /// <param name="parameters">Consumer configuration</param>
-    /// <param name="keyDeserializer">Key deserializer</param>
-    /// <param name="messageDeserializer">Message deserializer</param>
+    /// <param name="enrichBuilder">Enrich native kafka consumer builder with custom parameters</param>
     /// <returns>Confluent.Kafka producer</returns>
     public static IConsumer BuildKafka<TKey, TMessage, TProcessor>(
         this IConsumerBuilder builder,
         KafkaConsumerParameters parameters,
-        IDeserializer<TKey>? keyDeserializer = null,
-        IDeserializer<TMessage>? messageDeserializer = null)
+        Func<ConsumerBuilder<TKey, TMessage>, ConsumerBuilder<TKey, TMessage>>? enrichBuilder = null)
         where TProcessor : IProcessor<TKey, TMessage> =>
-        BuildKafka<TKey, TMessage, TProcessor>(
-            builder, _ => parameters, keyDeserializer, messageDeserializer);
+        BuildKafka<TKey, TMessage, TProcessor>(builder, _ => parameters, enrichBuilder);
 }
