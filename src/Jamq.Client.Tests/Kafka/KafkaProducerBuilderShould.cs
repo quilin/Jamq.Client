@@ -33,7 +33,7 @@ public class KafkaProducerBuilderShould : IClassFixture<KafkaFixture>
                 return next.Invoke(context, token);
             })
             .BuildKafka<string, string>((_, config) => 
-                new KafkaProducerParameters(new ProducerConfig(config), "demo-topic"));
+                new KafkaProducerParameters(new ProducerConfig(config), "demo-topic"), b => b);
 
         await producer.Send("test", "message", CancellationToken.None);
     }
@@ -53,7 +53,11 @@ public class KafkaProducerBuilderShould : IClassFixture<KafkaFixture>
                 {
                     GroupId = Guid.NewGuid().ToString(),
                     AutoOffsetReset = AutoOffsetReset.Earliest
-                }, "demo-topic"));
+                }, "demo-topic"), b => b
+                .SetLogHandler((c, l) =>
+                {
+                    testOutputHelper.WriteLine(l.Message);
+                }));
 
         consumer.Subscribe();
 

@@ -1,7 +1,6 @@
 ﻿using Confluent.Kafka;
 using Jamq.Client.Abstractions.Consuming;
 using Jamq.Client.Abstractions.Diagnostics;
-using Jamq.Client.Kafka.Defaults;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Jamq.Client.Kafka.Consuming;
@@ -22,16 +21,12 @@ public class KafkaConsumer<TKey, TMessage, TProcessor> : IConsumer
         IEnumerable<Func<
             ConsumerDelegate<TKey, TMessage, KafkaConsumerProperties<TKey, TMessage>>,
             ConsumerDelegate<TKey, TMessage, KafkaConsumerProperties<TKey, TMessage>>>> middlewares,
-        IDeserializer<TKey>? keyDeserializer,
-        IDeserializer<TMessage>? messageDeserializer)
+        Func<ConsumerBuilder<TKey, TMessage>, ConsumerBuilder<TKey, TMessage>> enrichBuilder)
     {
         this.serviceProvider = serviceProvider;
         this.parameters = parameters;
         nativeConsumer = new(
-            () => new ConsumerBuilder<TKey, TMessage>(parameters.ConsumerConfig)
-                .SetKeyDeserializer(keyDeserializer ?? new DefaultKafkaSerializer<TKey>())
-                .SetValueDeserializer(messageDeserializer ?? new DefaultKafkaSerializer<TMessage>())
-                .Build(),
+            () => enrichBuilder.Invoke(new ConsumerBuilder<TKey, TMessage>(parameters.ConsumerConfig)).Build(),
             LazyThreadSafetyMode.ExecutionAndPublication);
         pipeline = middlewares.Reverse().Aggregate(
             (ConsumerDelegate<TKey, TMessage, KafkaConsumerProperties<TKey, TMessage>>)((context, cancellationToken) =>
