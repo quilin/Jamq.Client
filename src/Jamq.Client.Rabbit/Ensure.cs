@@ -1,6 +1,7 @@
 ﻿using Jamq.Client.Rabbit.Consuming;
 using Jamq.Client.Rabbit.Producing;
 using RabbitMQ.Client;
+using System.Collections.Immutable;
 
 namespace Jamq.Client.Rabbit;
 
@@ -18,10 +19,16 @@ internal static class Ensure
     {
         if (parameters.ExchangeName is not null)
         {
-            channel.ExchangeDeclare(parameters.ExchangeName, parameters.ExchangeType.ToString().ToLower(), true);
+            channel.ExchangeDeclare(
+                exchange: parameters.ExchangeName,
+                type: parameters.ExchangeType.ToString().ToLower(),
+                durable: true,
+                arguments: parameters.AdditionalExchangeArguments ?? ImmutableDictionary<string, object>.Empty);
         }
 
-        var queueArguments = new Dictionary<string, object>();
+        var queueArguments = new Dictionary<string, object>(
+            parameters.AdditionalQueueArguments ?? ImmutableDictionary<string, object>.Empty);
+
         var queueName = parameters.Exclusive
             ? parameters.QueueName.WithRandomSuffix()
             : parameters.QueueName;
@@ -29,16 +36,17 @@ internal static class Ensure
 
         if (parameters.DeadLetterExchange is not null)
         {
-            channel.ExchangeDeclare(parameters.DeadLetterExchange, RabbitMQ.Client.ExchangeType.Fanout, true);
-            var dlqName = $"{parameters.DeadLetterExchange}-dlq";
-            channel.QueueDeclare(dlqName, true, false, false);
-            channel.QueueBind(dlqName, parameters.DeadLetterExchange, string.Empty);
-            
             queueArguments.Add("x-dead-letter-exchange", parameters.DeadLetterExchange);
             queueArguments.Add("x-dead-letter-routing-key", queueName);
         }
 
-        var result = channel.QueueDeclare(queueName, true, parameters.Exclusive, false, queueArguments);
+        var result = channel.QueueDeclare(
+            queue: queueName,
+            durable: true,
+            exclusive: parameters.Exclusive,
+            autoDelete: false,
+            arguments: queueArguments);
+
         if (parameters is { RoutingKeys: not null, ExchangeName: not null })
         {
             foreach (var routingKey in parameters.RoutingKeys)

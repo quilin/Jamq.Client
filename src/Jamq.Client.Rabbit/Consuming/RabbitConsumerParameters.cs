@@ -58,6 +58,10 @@ public class RabbitConsumerParameters
     /// </summary>
     public TimeSpan MaxProcessingAnticipation { get; init; } = TimeSpan.FromSeconds(30);
 
+    public IDictionary<string, object>? AdditionalQueueArguments { get; init; }
+
+    public IDictionary<string, object>? AdditionalExchangeArguments { get; init; }
+
     public RabbitConsumerParameters(
         string consumerTag,
         string queueName,
