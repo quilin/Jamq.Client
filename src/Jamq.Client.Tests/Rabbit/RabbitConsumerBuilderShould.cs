@@ -7,7 +7,6 @@ using Jamq.Client.Rabbit.Consuming;
 using Jamq.Client.Rabbit.Producing;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
-using Xunit.Abstractions;
 
 namespace Jamq.Client.Tests.Rabbit;
 
@@ -17,8 +16,7 @@ public class RabbitConsumerBuilderShould : IClassFixture<RabbitFixture>
     private readonly Mock<ITestCaller> caller;
 
     public RabbitConsumerBuilderShould(
-        RabbitFixture fixture,
-        ITestOutputHelper testOutputHelper)
+        RabbitFixture fixture)
     {
         this.fixture = fixture;
         caller = new Mock<ITestCaller>();
@@ -27,14 +25,11 @@ public class RabbitConsumerBuilderShould : IClassFixture<RabbitFixture>
         fixture.ServiceCollection.AddScoped<Processor>();
         fixture.ServiceCollection.AddScoped<SpecificWrongInterfacedMiddleware>();
 
-        DiagnosticListener.AllListeners.Subscribe(new RabbitFixture.Subscriber(testOutputHelper));
         ActivitySource.AddActivityListener(new ActivityListener
         {
             ShouldListenTo = s => s.Name == Event.SourceName,
             SampleUsingParentId = (ref ActivityCreationOptions<string> _) => ActivitySamplingResult.AllData,
             Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
-            ActivityStarted = activity => testOutputHelper.WriteLine($"Activity {activity.DisplayName}:{activity.Id} started at {activity.StartTimeUtc:O}"),
-            ActivityStopped = activity => testOutputHelper.WriteLine($"Activity {activity.DisplayName}:{activity.Id} stopped at {activity.StartTimeUtc + activity.Duration:O} (after {activity.Duration:g})"),
         });
     }
 

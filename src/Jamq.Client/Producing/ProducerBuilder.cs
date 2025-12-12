@@ -144,7 +144,7 @@ internal class ProducerBuilder : IProducerBuilder
 
             var parameters = methodInfo.GetParameters();
             if (parameters.Length < 2 ||
-                !parameters.First().ParameterType.IsAssignableTo(typeof(ProducerContext)) ||
+                !typeof(ProducerContext).IsAssignableFrom(parameters.First().ParameterType) ||
                 parameters.Last().ParameterType != typeof(CancellationToken))
             {
                 throw ProducerBuilderMiddlewareConventionException.MismatchParameters(type);
@@ -160,7 +160,7 @@ internal class ProducerBuilder : IProducerBuilder
                     (context, ct) => next((ProducerContext<TKey, TMessage, TNativeProperties>)context, ct));
                 if (parameters.Length == 2)
                 {
-                    return methodInfo.CreateDelegate<ProducerDelegate>(instance).Invoke;
+                    return ((ProducerDelegate) methodInfo.CreateDelegate(typeof(ProducerDelegate), instance)).Invoke;
                 }
 
                 var factory = MiddlewareCompiler

@@ -1,7 +1,6 @@
 ﻿using Jamq.Client.Rabbit.Consuming;
 using Jamq.Client.Rabbit.Producing;
 using RabbitMQ.Client;
-using System.Collections.Immutable;
 
 namespace Jamq.Client.Rabbit;
 
@@ -23,11 +22,11 @@ internal static class Ensure
                 exchange: parameters.ExchangeName,
                 type: parameters.ExchangeType.ToString().ToLower(),
                 durable: true,
-                arguments: parameters.AdditionalExchangeArguments ?? ImmutableDictionary<string, object>.Empty);
+                arguments: parameters.AdditionalExchangeArguments ?? new Dictionary<string, object>());
         }
 
         var queueArguments = new Dictionary<string, object>(
-            parameters.AdditionalQueueArguments ?? ImmutableDictionary<string, object>.Empty);
+            parameters.AdditionalQueueArguments ?? new Dictionary<string, object>());
 
         var queueName = parameters.Exclusive
             ? parameters.QueueName.WithRandomSuffix()
