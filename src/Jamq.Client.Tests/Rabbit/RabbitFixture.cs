@@ -1,6 +1,4 @@
-﻿using System.Diagnostics;
-using Jamq.Client.Abstractions.Consuming;
-using Jamq.Client.Abstractions.Diagnostics;
+﻿using Jamq.Client.Abstractions.Consuming;
 using Jamq.Client.Abstractions.Producing;
 using Jamq.Client.DependencyInjection;
 using Jamq.Client.Rabbit;
@@ -9,7 +7,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
-using Xunit.Abstractions;
 
 namespace Jamq.Client.Tests.Rabbit;
 
@@ -81,51 +78,5 @@ public class RabbitFixture : IDisposable
 
     public void Dispose()
     {
-    }
-
-    internal class Subscriber : IObserver<DiagnosticListener>
-    {
-        private readonly ITestOutputHelper testOutputHelper;
-
-        public Subscriber(ITestOutputHelper testOutputHelper)
-        {
-            this.testOutputHelper = testOutputHelper;
-        }
-        
-        public void OnCompleted()
-        {
-        }
-
-        public void OnError(Exception error)
-        {
-        }
-
-        public void OnNext(DiagnosticListener value)
-        {
-            if (value.Name == Event.SourceName)
-            {
-                value.Subscribe(new Listener(testOutputHelper));
-            }
-        }
-    }
-
-    private class Listener : IObserver<KeyValuePair<string, object?>>
-    {
-        private readonly ITestOutputHelper testOutputHelper;
-
-        public Listener(ITestOutputHelper testOutputHelper)
-        {
-            this.testOutputHelper = testOutputHelper;
-        }
-
-        public void OnCompleted()
-        {
-        }
-
-        public void OnError(Exception error)
-        {
-        }
-
-        public void OnNext(KeyValuePair<string, object?> keyValue) => testOutputHelper.WriteLine($"{keyValue.Key} - {keyValue.Value}");
     }
 }
