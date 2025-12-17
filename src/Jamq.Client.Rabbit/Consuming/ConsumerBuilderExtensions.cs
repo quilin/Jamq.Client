@@ -22,7 +22,7 @@ public static class ConsumerBuilderExtensions
         var components = builder.GetMiddlewares<string, TMessage, RabbitConsumerProperties>();
 
         var serviceProvider = builder.GetServiceProvider();
-        var channelPool = serviceProvider.GetRequiredService<IConsumerChannelPool>();
+        var channelPool = serviceProvider.GetRequiredService<IConsumerChannelProvider>();
 
         return new RabbitConsumer<TMessage, TProcessor>(channelPool, serviceProvider, parameters, components);
     }

@@ -3,7 +3,7 @@
         <Authors>quilin</Authors>
         <Owners>quilin</Owners>
         <PackageTags>RabbitMQ, Kafka, Client</PackageTags>
-        <LangVersion>10</LangVersion>
+        <LangVersion>12</LangVersion>
         <RepositoryUrl>https://github.com/quilin/Jamq.Client</RepositoryUrl>
         <PackageProjectUrl>https://github.com/quilin/Jamq.Client</PackageProjectUrl>
         <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>

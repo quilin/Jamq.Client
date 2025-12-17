@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using RabbitMQ.Client;
 using Jamq.Client.DependencyInjection;
 using Jamq.Client.Rabbit.Connection;
+using Jamq.Client.Rabbit.Connection.Adapters;
 using Jamq.Client.Rabbit.Defaults;
 
 namespace Jamq.Client.Rabbit.DependencyInjection;
@@ -23,8 +24,8 @@ public static class JamqClientConfigurationExtensions
     {
         configuration.GetServiceCollection()
             .AddSingleton(parametersProvider)
-            .AddSingleton<IProducerChannelPool, ChannelPool>(ChannelPoolProvider)
-            .AddSingleton<IConsumerChannelPool, ChannelPool>(ChannelPoolProvider)
+            .AddSingleton<IProducerChannelProvider, ChannelProvider>(ChannelPoolProvider)
+            .AddSingleton<IConsumerChannelProvider, ChannelProvider>(ChannelPoolProvider)
             .AddTransient(typeof(DefaultDiagnosticMiddleware<>))
             .AddTransient(typeof(DefaultCodecMiddleware<>));
 
@@ -39,7 +40,7 @@ public static class JamqClientConfigurationExtensions
         return configuration;
     }
 
-    private static ChannelPool ChannelPoolProvider(IServiceProvider serviceProvider)
+    private static ChannelProvider ChannelPoolProvider(IServiceProvider serviceProvider)
     {
         var parameters = serviceProvider.GetService<RabbitConnectionParameters>() ??
             new RabbitConnectionParameters();
@@ -60,6 +61,6 @@ public static class JamqClientConfigurationExtensions
             ["product"] = Event.SourceName,
             ["version"] = Event.VersionName
         };
-        return new ChannelPool(connectionFactory, parameters);
+        return new ChannelProvider(connectionFactory);
     }
 }

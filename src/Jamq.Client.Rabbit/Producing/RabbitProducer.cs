@@ -1,14 +1,14 @@
 ﻿using Jamq.Client.Abstractions.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Jamq.Client.Abstractions.Producing;
-using Jamq.Client.Rabbit.Connection;
 using Jamq.Client.Rabbit.Connection.Adapters;
+using IChannelProvider = Jamq.Client.Rabbit.Connection.IChannelProvider;
 
 namespace Jamq.Client.Rabbit.Producing;
 
 internal class RabbitProducer<TMessage> : IProducer<string, TMessage>
 {
-    private readonly IChannelPool channelPool;
+    private readonly IChannelProvider channelProvider;
     private readonly IServiceProvider serviceProvider;
     private readonly RabbitProducerParameters parameters;
     private readonly ProducerDelegate<string, TMessage, RabbitProducerProperties> pipeline;
@@ -16,12 +16,12 @@ internal class RabbitProducer<TMessage> : IProducer<string, TMessage>
     private Lazy<IChannelAdapter> channelAccessor;
 
     public RabbitProducer(
-        IChannelPool channelPool,
+        IChannelProvider channelProvider,
         IServiceProvider serviceProvider,
         RabbitProducerParameters parameters,
         IEnumerable<Func<ProducerDelegate<string, TMessage, RabbitProducerProperties>, ProducerDelegate<string, TMessage, RabbitProducerProperties>>> middlewares)
     {
-        this.channelPool = channelPool;
+        this.channelProvider = channelProvider;
         this.serviceProvider = serviceProvider;
         this.parameters = parameters;
 
@@ -32,8 +32,8 @@ internal class RabbitProducer<TMessage> : IProducer<string, TMessage>
 
     private Lazy<IChannelAdapter> CreateChannelAccessor(bool restored) => new(() =>
     {
-        var channel = channelPool.Get();
-        channel.OnDisrupted += Restore!;
+        var channel = channelProvider.Get();
+        channel.OnDisrupted += Restore;
         if (restored)
         {
             Event.WriteIfEnabled(RabbitDiagnostics.ChannelRestore, new {Channel = channel});
@@ -57,7 +57,7 @@ internal class RabbitProducer<TMessage> : IProducer<string, TMessage>
         }
 
         var channel = channelAccessor.Value;
-        channel.OnDisrupted -= Restore!;
+        channel.OnDisrupted -= Restore;
         channel.Dispose();
     }
 
