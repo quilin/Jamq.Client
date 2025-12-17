@@ -3,8 +3,8 @@ using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using Jamq.Client.Abstractions.Consuming;
 using Jamq.Client.Abstractions.Diagnostics;
-using Jamq.Client.Rabbit.Connection;
 using Jamq.Client.Rabbit.Connection.Adapters;
+using IChannelProvider = Jamq.Client.Rabbit.Connection.IChannelProvider;
 
 namespace Jamq.Client.Rabbit.Consuming;
 
@@ -12,7 +12,7 @@ internal class RabbitConsumer<TMessage, TProcessor> : IConsumer
     where TProcessor : IProcessor<string, TMessage>
 {
     private readonly RabbitConsumerParameters parameters;
-    private readonly IChannelPool channelPool;
+    private readonly IChannelProvider channelProvider;
     private readonly IServiceProvider serviceProvider;
     private readonly ConsumerDelegate<string, TMessage, RabbitConsumerProperties> pipeline;
 
@@ -26,12 +26,12 @@ internal class RabbitConsumer<TMessage, TProcessor> : IConsumer
     private readonly Func<IModel> channelAccessor;
 
     public RabbitConsumer(
-        IChannelPool channelPool,
+        IChannelProvider channelProvider,
         IServiceProvider serviceProvider,
         RabbitConsumerParameters parameters,
         IEnumerable<Func<ConsumerDelegate<string, TMessage, RabbitConsumerProperties>, ConsumerDelegate<string, TMessage, RabbitConsumerProperties>>> middlewares)
     {
-        this.channelPool = channelPool;
+        this.channelProvider = channelProvider;
         this.serviceProvider = serviceProvider;
         this.parameters = parameters;
 
@@ -70,8 +70,8 @@ internal class RabbitConsumer<TMessage, TProcessor> : IConsumer
 
     private Lazy<ConsumerConnectionState> CreateConnectionAccessor() => new(() =>
     {
-        var channelAdapter = channelPool.Get();
-        channelAdapter.OnDisrupted += Restore!;
+        var channelAdapter = channelProvider.Get();
+        channelAdapter.OnDisrupted += Restore;
 
         var channel = channelAdapter.Channel;
         var consumer = new AsyncEventingBasicConsumer(channel);
@@ -176,7 +176,7 @@ internal class RabbitConsumer<TMessage, TProcessor> : IConsumer
 
         var connectionState = connectionAccessor.Value;
         connectionState.Consumer.Received -= connectionState.IncomingMessageHandler;
-        connectionState.ChannelAdapter.OnDisrupted -= Restore!;
+        connectionState.ChannelAdapter.OnDisrupted -= Restore;
 
         if (!connectionIsDisrupted)
         {
@@ -258,7 +258,7 @@ internal class RabbitConsumer<TMessage, TProcessor> : IConsumer
                 return false;
             }
 
-            using var channelAdapter = channelPool.Get();
+            using var channelAdapter = channelProvider.Get();
             return channelAdapter.Channel.QueueDeclarePassive(parameters.DeclaredQueueName).MessageCount == 0;
         }
     }

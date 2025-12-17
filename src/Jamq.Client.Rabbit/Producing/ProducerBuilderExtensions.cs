@@ -18,7 +18,7 @@ public static class ProducerBuilderExtensions
     {
         var components = builder.GetMiddlewares<string, TMessage, RabbitProducerProperties>();
         var serviceProvider = builder.GetServiceProvider();
-        var channelPool = serviceProvider.GetRequiredService<IProducerChannelPool>();
+        var channelPool = serviceProvider.GetRequiredService<IProducerChannelProvider>();
         return new RabbitProducer<TMessage>(channelPool, serviceProvider, parameters, components);
     }
 }
